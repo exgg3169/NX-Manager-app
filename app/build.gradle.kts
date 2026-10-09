@@ -18,7 +18,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Until a release key exists, release builds use the debug key so they can be installed.
             signingConfig = signingConfigs.getByName("debug")
         }

@@ -184,7 +184,7 @@ object GmsCorePatch : Patch {
         onCreate.code.let { code ->
             code.insertAt(0, listOf(invokeStaticRange(code.parameterRegister(onCreate, 0), EXTENSION)))
         }
-        ctx.addExtension("/nx/extension.dex")
+        ctx.addExtension("/nx/extension.bin")
 
         // endregion
     }

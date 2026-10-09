@@ -67,7 +67,8 @@ val dexExtension by tasks.registering(Exec::class) {
     }
     doLast {
         val dir = outDir.get().asFile
-        File(dir, "classes.dex").renameTo(File(dir, "extension.dex"))
+        // Not named .dex, which R8 would mistake for app code when shrinking the Android app.
+        File(dir, "classes.dex").renameTo(File(dir, "extension.bin"))
     }
 }
 
