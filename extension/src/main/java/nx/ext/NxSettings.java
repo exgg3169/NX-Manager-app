@@ -102,11 +102,18 @@ public final class NxSettings {
             Nx.t("Varsayılan kalite (mobil veri)", "Default quality (mobile data)"), "auto", QUALITY_VALUES, QUALITY_LABELS);
     public static final Setting SPEED = choice("speed", VIDEO,
             Nx.t("Varsayılan oynatma hızı", "Default playback speed"), "1.0",
-            new String[]{"0.25", "0.5", "0.75", "1.0", "1.25", "1.5", "1.75", "2.0"},
-            new String[]{"0.25x", "0.5x", "0.75x", Nx.t("Normal", "Normal"), "1.25x", "1.5x", "1.75x", "2x"});
+            Video.SPEED_VALUES, Video.speedLabels());
     public static final Setting REMEMBER_SPEED = bool("remember_speed", VIDEO,
             Nx.t("Seçilen hızı hatırla", "Remember chosen speed"),
             Nx.t("Videoda değiştirdiğiniz hız sonraki videolarda da kullanılır", "A speed you pick is used for the next videos too"), true);
+
+    static {
+        feature = "speed_menu";
+    }
+
+    public static final Setting SPEED_MENU = bool("speed_menu", VIDEO,
+            Nx.t("NX hız menüsü (4x'e kadar)", "NX speed menu (up to 4x)"),
+            Nx.t("YouTube'un hız menüsü yerine Premium istemeyen NX menüsünü açar", "Opens NX's menu, which needs no Premium, instead of YouTube's"), true);
 
     // endregion
 

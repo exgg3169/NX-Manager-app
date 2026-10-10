@@ -116,7 +116,7 @@ object Patcher {
                 .map { (name, _) -> name to zip.read(name) }
                 .toList()
             log("${dexEntries.size} dex dosyası okunuyor…")
-            PatchContext(DexStore(dexEntries), manifest, options, resourceIds, xmlFiles, launcherIcon, log)
+            PatchContext(DexStore(dexEntries), manifest, options, resourceIds, xmlFiles, launcherIcon, input, log)
         }
 
         log("Kod taranıyor…")

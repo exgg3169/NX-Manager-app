@@ -19,8 +19,14 @@ class PatchContext(
     private val xmlFiles: Map<String, Pair<String, ByteArray>>,
     /** The launcher icon's files, when a patch set [Patch.usesLauncherIcon]. */
     val launcherIcon: LauncherIcon?,
+    private val apk: java.io.File,
     private val logger: (String) -> Unit,
 ) {
+    /** Reads a file of the input APK (the latest replacement if a patch changed it). */
+    fun readApkFile(path: String): ByteArray = fileChanges[path] ?: java.util.zip.ZipFile(apk).use { zip ->
+        zip.getInputStream(zip.getEntry(path) ?: throw PatchException("$path not found in APK")).use { it.readBytes() }
+    }
+
     private val fileChanges = LinkedHashMap<String, ByteArray>()
 
     /** Replaces a file of the APK, e.g. a resource image. */

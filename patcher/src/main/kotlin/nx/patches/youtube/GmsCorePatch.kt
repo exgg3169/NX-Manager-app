@@ -126,6 +126,10 @@ object GmsCorePatch : Patch {
         manifest.addMetaData("$GMS_PACKAGE.SPOOFED_PACKAGE_SIGNATURE", YouTube.SIGNATURE_SHA1)
         ctx.log("  Manifest: paket $original → $renamed, $manifestChanges değer değişti")
 
+        // The app looks up resources by name in its own package (getIdentifier(name, type,
+        // getPackageName())), e.g. most icons. The resource table must carry the new name too.
+        ctx.replaceFile("resources.arsc", renameResourcePackage(ctx.readApkFile("resources.arsc"), original, renamed))
+
         // endregion
 
         // region Strings in code
@@ -187,6 +191,32 @@ object GmsCorePatch : Patch {
         ctx.addExtension("/nx/extension.bin")
 
         // endregion
+    }
+
+    /** Renames the package chunk(s) of a binary resource table in place (fixed 128-character field). */
+    private fun renameResourcePackage(table: ByteArray, from: String, to: String): ByteArray {
+        if (to.length > 127) throw PatchException("Paket adı çok uzun")
+        val buf = java.nio.ByteBuffer.wrap(table).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        var offset = buf.getShort(2).toInt() and 0xffff // table header size
+        var renamed = 0
+        while (offset + 8 <= table.size) {
+            val type = buf.getShort(offset).toInt() and 0xffff
+            val size = buf.getInt(offset + 4)
+            if (size <= 0) break
+            if (type == 0x0200) {
+                val nameAt = offset + 12
+                val current = String(table, nameAt, 256, Charsets.UTF_16LE).substringBefore('\u0000')
+                if (current == from) {
+                    java.util.Arrays.fill(table, nameAt, nameAt + 256, 0)
+                    val bytes = to.toByteArray(Charsets.UTF_16LE)
+                    System.arraycopy(bytes, 0, table, nameAt, bytes.size)
+                    renamed++
+                }
+            }
+            offset += size
+        }
+        if (renamed == 0) throw PatchException("Resource package $from not found")
+        return table
     }
 
     private fun toVendor(name: String) = VENDOR + name.removePrefix("com.google")

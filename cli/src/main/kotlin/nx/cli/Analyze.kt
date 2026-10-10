@@ -60,6 +60,17 @@ object Analyze {
         for (c in classes(apk)) if (type in c.interfaces || c.superclass == type) println(c.type)
     }
 
+    /** Prints methods reading or writing a field, given as `Lcls;->name`. */
+    fun fieldUsers(apk: File, field: String) {
+        for (c in classes(apk)) for (m in c.methods) {
+            val impl = m.implementation ?: continue
+            if (impl.instructions.any {
+                    val r = (it as? ReferenceInstruction)?.reference as? com.android.tools.smali.dexlib2.iface.reference.FieldReference
+                    r != null && "${r.definingClass}->${r.name}" == field
+                }) println("${c.type}->${m.name}(${m.parameterTypes.joinToString("")})${m.returnType}")
+        }
+    }
+
     /** Disassembles a whole class to smali. */
     fun dump(apk: File, type: String) {
         val c = classes(apk).firstOrNull { it.type == type } ?: error("class not found: $type")

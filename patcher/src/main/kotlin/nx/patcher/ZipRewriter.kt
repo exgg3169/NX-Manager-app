@@ -78,11 +78,13 @@ object ZipRewriter {
                 }
                 for ((name, bytes) in replace) {
                     val crc = CRC32().apply { update(bytes) }.value
-                    val compressed = ByteArrayOutputStream(bytes.size / 2).also { buffer ->
+                    // Android requires the resource table to be stored uncompressed.
+                    val store = name == "resources.arsc"
+                    val compressed = if (store) bytes else ByteArrayOutputStream(bytes.size / 2).also { buffer ->
                         DeflaterOutputStream(buffer, Deflater(Deflater.DEFAULT_COMPRESSION, true)).use { it.write(bytes) }
                     }.toByteArray()
                     val entry = CdEntry(
-                        name, versionMadeBy = 20, versionNeeded = 20, flags = 0x800, method = 8,
+                        name, versionMadeBy = 20, versionNeeded = if (store) 10 else 20, flags = 0x800, method = if (store) 0 else 8,
                         time = 0, date = (1 shl 5) or 1, crc = crc, compressedSize = compressed.size.toLong(),
                         size = bytes.size.toLong(), externalAttributes = 0, localOffset = 0,
                     )

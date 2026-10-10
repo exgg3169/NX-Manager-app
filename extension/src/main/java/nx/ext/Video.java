@@ -106,6 +106,70 @@ public final class Video {
 
     // region Playback speed
 
+    /** Speeds the player accepts: it clamps to 0.25x–4x. */
+    static final String[] SPEED_VALUES = {"0.25", "0.5", "0.75", "1.0", "1.25", "1.5", "1.75", "2.0", "2.5", "3.0", "3.5", "4.0"};
+
+    static String[] speedLabels() {
+        String[] labels = new String[SPEED_VALUES.length];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = "1.0".equals(SPEED_VALUES[i]) ? Nx.t("Normal", "Normal") : label(parseSpeed(SPEED_VALUES[i]));
+        }
+        return labels;
+    }
+
+    private static String label(float speed) {
+        return (speed == (int) speed ? String.valueOf((int) speed) : String.valueOf(speed)) + "x";
+    }
+
+    private static float currentSpeed = 1.0f;
+
+    /**
+     * Injection point: the user opened the speed menu. [menuItem] is YouTube's menu entry, which
+     * holds the activity. Returns true when NX showed its own menu instead.
+     */
+    public static boolean showSpeedMenu(Object menuItem) {
+        try {
+            if (!Features.has(Features.SPEED_MENU) || !Nx.bool(NxSettings.SPEED_MENU)) return false;
+            android.app.Activity activity = null;
+            for (Class<?> c = menuItem.getClass(); c != null && activity == null; c = c.getSuperclass()) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    if (!android.app.Activity.class.isAssignableFrom(f.getType())) continue;
+                    f.setAccessible(true);
+                    activity = (android.app.Activity) f.get(menuItem);
+                    if (activity != null) break;
+                }
+            }
+            if (activity == null || activity.isFinishing() || player.get() == null) return false;
+            final String[] labels = speedLabels();
+            int checked = -1;
+            for (int i = 0; i < SPEED_VALUES.length; i++) {
+                if (parseSpeed(SPEED_VALUES[i]) == currentSpeed) checked = i;
+            }
+            new android.app.AlertDialog.Builder(activity)
+                    .setTitle(Nx.t("Oynatma hızı", "Playback speed"))
+                    .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                        float speed = parseSpeed(SPEED_VALUES[which]);
+                        // Picked by the user, so it may be remembered like a choice in YouTube's menu.
+                        speedMethodInvoke(speed);
+                        dialog.dismiss();
+                    })
+                    .show();
+            return true;
+        } catch (Throwable t) {
+            Nx.log("Speed menu failed", t);
+            return false;
+        }
+    }
+
+    private static void speedMethodInvoke(float speed) {
+        try {
+            Object p = player.get();
+            if (p != null && speedMethod != null) speedMethod.invoke(p, speed);
+        } catch (Throwable t) {
+            Nx.log("Speed failed", t);
+        }
+    }
+
     private static void applyDefaultSpeed() {
         final float speed = parseSpeed(Nx.str(NxSettings.SPEED));
         if (speed == 1.0f) return;
@@ -126,6 +190,7 @@ public final class Video {
 
     /** Injection point: the player speed changes, by the user or by the app. */
     public static void onSpeedSet(float speed) {
+        if (speed > 0f) currentSpeed = speed;
         if (settingSpeed || !Features.has(Features.QUALITY) || !Nx.bool(NxSettings.REMEMBER_SPEED)) return;
         // Changes right after a video starts come from the app, not the user.
         if (SystemClock.elapsedRealtime() - newVideoAt < 2500) return;

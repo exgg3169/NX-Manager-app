@@ -5,6 +5,7 @@ import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c
+import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21t
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c
 import com.android.tools.smali.dexlib2.builder.MutableMethodImplementation
 import com.android.tools.smali.dexlib2.iface.Method
@@ -26,6 +27,7 @@ import nx.patcher.insertAtTarget
 import nx.patcher.invokeStaticRange
 import nx.patcher.methodRef
 import nx.patcher.parameterRegister
+import nx.patcher.parameterRegisterCount
 import nx.patcher.returnIndexes
 import nx.patcher.single
 import nx.patcher.stringValue
@@ -333,5 +335,49 @@ object DiagnosticsPatch : Patch {
             }
         }
         ctx.log("  Jeton: ${read.name}(), depo: ${stores.joinToString()} ($hooks kanca), oynatıcı hataları: $errorClass")
+    }
+}
+
+/**
+ * Replaces YouTube's playback speed menu with NX's own list. The new menu offers speeds above
+ * 2x only to Premium members; the player itself accepts 0.25x to 4x.
+ */
+object SpeedMenuPatch : Patch {
+    override val id = "youtube-speed-menu"
+    override val title = "Hız menüsü (4x'e kadar)"
+    override val description = "Oynatma hızı menüsünü 0.25x–4x arası tüm hızları Premium istemeden sunan NX menüsüyle değiştirir."
+    override val packageName = YouTube.PACKAGE
+    override val testedVersions = YouTube.TESTED_VERSIONS
+    override val dependencies = listOf(VideoInfoPatch)
+
+    private const val HOOK = "Lnx/ext/Video;->showSpeedMenu(Ljava/lang/Object;)Z"
+    private const val BLOCKS_CLIENT = "Lcom/google/android/libraries/blocks/runtime/BaseClient;"
+
+    // The overflow menu entry; its list builder labels speeds as "%.2fx".
+    private val speedMenuItem = MethodFilter(
+        "Playback speed menu item", strings = listOf("menu_item_playback_speed", "%.2fx"),
+        returnType = "V", parameters = listOf("[L", "I"),
+    )
+
+    override val filters = listOf(speedMenuItem)
+
+    override fun apply(ctx: PatchContext) {
+        ctx.manifest.addFeature("speed_menu")
+        val item = ctx.dex.edit(ctx.dex.single(speedMenuItem).classType)
+        // The click handler opens the server-driven speed sheet through the blocks runtime.
+        val open = item.methodList.singleOrNull { m ->
+            m.parameterTypes.isEmpty() && m.returnType == "V" &&
+                m.implementation?.instructions?.any { it.methodRef?.definingClass == BLOCKS_CLIENT } == true
+        } ?: throw PatchException("Speed menu click handler not found")
+        val code = open.code
+        if (code.registerCount - open.parameterRegisterCount < 1) throw PatchException("No free register in speed menu")
+        val original = code.newLabelForIndex(0)
+        listOf(
+            invokeStaticRange(code.parameterRegister(open, 0), HOOK),
+            BuilderInstruction11x(Opcode.MOVE_RESULT, 0),
+            BuilderInstruction21t(Opcode.IF_EQZ, 0, original),
+            BuilderInstruction10x(Opcode.RETURN_VOID),
+        ).asReversed().forEach { code.addInstruction(0, it) }
+        ctx.log("  Hız menüsü: ${item.type}->${open.name}")
     }
 }

@@ -86,7 +86,7 @@ public final class Diagnostics {
         if (code == null) return;
         add(Nx.t("Oynatıcı hatası: ", "Player error: ") + code);
         // "cache" reports are routine disk cache notes, not playback failures.
-        if (!"cache".equals(code) && Nx.bool(NxSettings.DIAG_TOASTS)) {
+        if (!code.startsWith("cache") && Nx.bool(NxSettings.DIAG_TOASTS)) {
             long now = SystemClock.elapsedRealtime();
             if (now - lastToastAt > 3000) {
                 lastToastAt = now;
