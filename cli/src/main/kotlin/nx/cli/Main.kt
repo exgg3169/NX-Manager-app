@@ -24,6 +24,7 @@ fun main(args: Array<String>) {
         "sig" -> Analyze.signature(File(args[1]), args[2], args[3])
         "impl" -> Analyze.implementers(File(args[1]), args[2])
         "field" -> Analyze.fieldUsers(File(args[1]), args[2])
+        "calls" -> Analyze.callers(File(args[1]), args[2])
         "grep" -> Analyze.grep(File(args[1]), args[2])
         "dump" -> Analyze.dump(File(args[1]), args[2])
         else -> println("usage: patch <in.apk> <out.apk> [keyDir] | grep <apk> <regex> | dump <apk> <Lclass;>")

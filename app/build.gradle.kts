@@ -12,8 +12,8 @@ android {
         applicationId = "app.nx.manager"
         minSdk = 28
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.3.3"
+        versionCode = 9
+        versionName = "0.3.4"
     }
 
     buildTypes {

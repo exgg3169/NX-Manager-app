@@ -5,7 +5,6 @@ import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction10x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction11x
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21c
-import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction21t
 import com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction35c
 import com.android.tools.smali.dexlib2.builder.MutableMethodImplementation
 import com.android.tools.smali.dexlib2.iface.Method
@@ -27,7 +26,7 @@ import nx.patcher.insertAtTarget
 import nx.patcher.invokeStaticRange
 import nx.patcher.methodRef
 import nx.patcher.parameterRegister
-import nx.patcher.parameterRegisterCount
+import nx.patcher.parseMethodReference
 import nx.patcher.returnIndexes
 import nx.patcher.single
 import nx.patcher.stringValue
@@ -339,45 +338,50 @@ object DiagnosticsPatch : Patch {
 }
 
 /**
- * Replaces YouTube's playback speed menu with NX's own list. The new menu offers speeds above
- * 2x only to Premium members; the player itself accepts 0.25x to 4x.
+ * Unlocks speeds up to 4x in YouTube's playback speed panel. The panel's slider ends at the
+ * maximum of a speed config (2x for non-Premium accounts) and preset chips above it are shown
+ * as Premium-only; the player itself accepts 0.25x to 4x.
  */
 object SpeedMenuPatch : Patch {
     override val id = "youtube-speed-menu"
-    override val title = "Hız menüsü (4x'e kadar)"
-    override val description = "Oynatma hızı menüsünü 0.25x–4x arası tüm hızları Premium istemeden sunan NX menüsüyle değiştirir."
+    override val title = "4x'e kadar hız"
+    override val description = "Oynatma hızı panelinde 2x üstü hızları (3x, 4x) Premium istemeden açar."
     override val packageName = YouTube.PACKAGE
     override val testedVersions = YouTube.TESTED_VERSIONS
-    override val dependencies = listOf(VideoInfoPatch)
 
-    private const val HOOK = "Lnx/ext/Video;->showSpeedMenu(Ljava/lang/Object;)Z"
-    private const val BLOCKS_CLIENT = "Lcom/google/android/libraries/blocks/runtime/BaseClient;"
+    private const val HOOK = "Lnx/ext/Video;->maxSpeedPercent(I)I"
 
-    // The overflow menu entry; its list builder labels speeds as "%.2fx".
-    private val speedMenuItem = MethodFilter(
-        "Playback speed menu item", strings = listOf("menu_item_playback_speed", "%.2fx"),
-        returnType = "V", parameters = listOf("[L", "I"),
+    // Builds the speed panel from the server's speed config, or from a built-in one (0.25x–2x).
+    private val speedPanel = MethodFilter(
+        "Playback speed panel", strings = listOf("0.25", "1.25", "1.5", "2.0"),
+        parameters = listOf("Landroid/content/Context;", "Lj\$/util/Optional;"), isStatic = true,
     )
 
-    override val filters = listOf(speedMenuItem)
+    override val filters = listOf(speedPanel)
 
     override fun apply(ctx: PatchContext) {
         ctx.manifest.addFeature("speed_menu")
-        val item = ctx.dex.edit(ctx.dex.single(speedMenuItem).classType)
-        // The click handler opens the server-driven speed sheet through the blocks runtime.
-        val open = item.methodList.singleOrNull { m ->
-            m.parameterTypes.isEmpty() && m.returnType == "V" &&
-                m.implementation?.instructions?.any { it.methodRef?.definingClass == BLOCKS_CLIENT } == true
-        } ?: throw PatchException("Speed menu click handler not found")
-        val code = open.code
-        if (code.registerCount - open.parameterRegisterCount < 1) throw PatchException("No free register in speed menu")
-        val original = code.newLabelForIndex(0)
-        listOf(
-            invokeStaticRange(code.parameterRegister(open, 0), HOOK),
-            BuilderInstruction11x(Opcode.MOVE_RESULT, 0),
-            BuilderInstruction21t(Opcode.IF_EQZ, 0, original),
-            BuilderInstruction10x(Opcode.RETURN_VOID),
-        ).asReversed().forEach { code.addInstruction(0, it) }
-        ctx.log("  Hız menüsü: ${item.type}->${open.name}")
+        val panel = ctx.dex.edit(ctx.dex.single(speedPanel))
+        val code = panel.code
+        val ins = code.instructions
+        // The built-in config stores 200 (2x, in percent) as its maximum.
+        val maxField = ins.indices.firstNotNullOfOrNull { i ->
+            val cur = ins[i]
+            if (cur.opcode != Opcode.IPUT || i == 0) return@firstNotNullOfOrNull null
+            val prev = ins[i - 1] as? com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
+            if (prev?.narrowLiteral == 200) (cur as ReferenceInstruction).reference as FieldReference else null
+        } ?: throw PatchException("Speed panel maximum not found")
+        val reads = ins.indices.filter {
+            ins[it].opcode == Opcode.IGET && (ins[it] as ReferenceInstruction).reference.toString() == maxField.toString()
+        }
+        if (reads.isEmpty()) throw PatchException("Speed panel maximum is never read")
+        for (index in reads.asReversed()) {
+            val register = (ins[index] as TwoRegisterInstruction).registerA
+            listOf(
+                BuilderInstruction35c(Opcode.INVOKE_STATIC, 1, register, 0, 0, 0, 0, parseMethodReference(HOOK)),
+                BuilderInstruction11x(Opcode.MOVE_RESULT, register),
+            ).asReversed().forEach { code.addInstruction(index + 1, it) }
+        }
+        ctx.log("  Hız paneli: ${panel.definingClass}->${panel.name}, üst sınır alanı ${maxField.name} (${reads.size} yer)")
     }
 }

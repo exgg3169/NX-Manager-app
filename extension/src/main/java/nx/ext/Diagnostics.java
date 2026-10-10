@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.IBinder;
-import android.os.SystemClock;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
@@ -22,12 +21,11 @@ public final class Diagnostics {
     private Diagnostics() {
     }
 
-    private static final int MAX_EVENTS = 15;
+    private static final int MAX_EVENTS = 40;
     private static final Deque<String> events = new ArrayDeque<>();
     private static long lastTokenAt;
     private static int lastTokenSize = -1;
     private static int tokenCount, missingCount;
-    private static long lastToastAt;
 
     // region Injection points
 
@@ -84,15 +82,9 @@ public final class Diagnostics {
     /** A player error report with its code, e.g. "potoken.nulloninit". */
     public static void onPlayerError(String code) {
         if (code == null) return;
-        add(Nx.t("Oynatıcı hatası: ", "Player error: ") + code);
         // "cache" reports are routine disk cache notes, not playback failures.
-        if (!code.startsWith("cache") && Nx.bool(NxSettings.DIAG_TOASTS)) {
-            long now = SystemClock.elapsedRealtime();
-            if (now - lastToastAt > 3000) {
-                lastToastAt = now;
-                Nx.toast("NX: " + code);
-            }
-        }
+        if (code.startsWith("cache")) return;
+        add(Nx.t("Oynatıcı hatası: ", "Player error: ") + code);
     }
 
     // endregion
@@ -127,6 +119,32 @@ public final class Diagnostics {
         sb.append("\n\n").append(Nx.t("Son olaylar:", "Recent events:"));
         if (events.isEmpty()) sb.append('\n').append(Nx.t("(yok)", "(none)"));
         for (String e : events) sb.append('\n').append(e);
+        return sb.toString();
+    }
+
+    /** The report with app and device details, for pasting into a bug report. */
+    public static String fullReport(Context context) {
+        StringBuilder sb = new StringBuilder("NX YouTube tanılama\n");
+        try {
+            android.content.pm.PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            sb.append("YouTube: ").append(info.versionName).append('\n');
+        } catch (Throwable ignored) {
+        }
+        try {
+            android.content.pm.PackageInfo gms = context.getPackageManager().getPackageInfo("app.revanced.android.gms", 0);
+            sb.append("microG: ").append(gms.versionName).append('\n');
+        } catch (Throwable t) {
+            sb.append("microG: ").append(Nx.t("yok", "missing")).append('\n');
+        }
+        sb.append(Nx.t("Cihaz: ", "Device: ")).append(android.os.Build.MANUFACTURER).append(' ').append(android.os.Build.MODEL)
+                .append(", Android ").append(android.os.Build.VERSION.RELEASE).append('\n');
+        try {
+            String features = context.getPackageManager().getApplicationInfo(context.getPackageName(),
+                    android.content.pm.PackageManager.GET_META_DATA).metaData.getString("nx.features", "");
+            sb.append(Nx.t("Özellikler: ", "Features: ")).append(features).append('\n');
+        } catch (Throwable ignored) {
+        }
+        sb.append('\n').append(report());
         return sb.toString();
     }
 

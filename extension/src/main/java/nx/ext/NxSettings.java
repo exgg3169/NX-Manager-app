@@ -112,8 +112,8 @@ public final class NxSettings {
     }
 
     public static final Setting SPEED_MENU = bool("speed_menu", VIDEO,
-            Nx.t("NX hız menüsü (4x'e kadar)", "NX speed menu (up to 4x)"),
-            Nx.t("YouTube'un hız menüsü yerine Premium istemeyen NX menüsünü açar", "Opens NX's menu, which needs no Premium, instead of YouTube's"), true);
+            Nx.t("4x'e kadar hız", "Speeds up to 4x"),
+            Nx.t("Hız panelinde 2x üstü hızlar (3x, 4x) Premium istemeden kullanılır", "Speeds above 2x (3x, 4x) in the speed panel work without Premium"), true);
 
     // endregion
 
@@ -167,14 +167,6 @@ public final class NxSettings {
     // endregion
 
     // region Diagnostics
-
-    static {
-        feature = Features.DIAGNOSTICS;
-    }
-
-    public static final Setting DIAG_TOASTS = bool("diag_toasts", Nx.t("Tanılama", "Diagnostics"),
-            Nx.t("Oynatıcı hatalarını anında göster", "Show player errors instantly"),
-            Nx.t("Video durduğunda hata kodu ekranda kısa süre görünür", "When a video stops, its error code is shown briefly"), true);
 
     // endregion
 }

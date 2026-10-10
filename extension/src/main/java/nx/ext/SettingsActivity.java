@@ -109,6 +109,14 @@ public final class SettingsActivity extends Activity {
             Diagnostics.clear();
             report.setText(Diagnostics.report());
         });
+        Button copy = new Button(this);
+        copy.setText(Nx.t("Hataları kopyala", "Copy errors"));
+        copy.setOnClickListener(v -> {
+            android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NX", Diagnostics.fullReport(this)));
+            Nx.toast(Nx.t("Panoya kopyalandı", "Copied to clipboard"));
+        });
+        buttons.addView(copy);
         buttons.addView(refresh);
         buttons.addView(clear);
         list.addView(test);

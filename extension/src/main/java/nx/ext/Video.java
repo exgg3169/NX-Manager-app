@@ -121,53 +121,17 @@ public final class Video {
         return (speed == (int) speed ? String.valueOf((int) speed) : String.valueOf(speed)) + "x";
     }
 
-    private static float currentSpeed = 1.0f;
-
     /**
-     * Injection point: the user opened the speed menu. [menuItem] is YouTube's menu entry, which
-     * holds the activity. Returns true when NX showed its own menu instead.
+     * Injection point: the maximum of the speed panel, in percent. Preset speeds above it are
+     * shown as Premium-only, so it is raised to the player's own limit of 4x.
      */
-    public static boolean showSpeedMenu(Object menuItem) {
+    public static int maxSpeedPercent(int max) {
         try {
-            if (!Features.has(Features.SPEED_MENU) || !Nx.bool(NxSettings.SPEED_MENU)) return false;
-            android.app.Activity activity = null;
-            for (Class<?> c = menuItem.getClass(); c != null && activity == null; c = c.getSuperclass()) {
-                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
-                    if (!android.app.Activity.class.isAssignableFrom(f.getType())) continue;
-                    f.setAccessible(true);
-                    activity = (android.app.Activity) f.get(menuItem);
-                    if (activity != null) break;
-                }
-            }
-            if (activity == null || activity.isFinishing() || player.get() == null) return false;
-            final String[] labels = speedLabels();
-            int checked = -1;
-            for (int i = 0; i < SPEED_VALUES.length; i++) {
-                if (parseSpeed(SPEED_VALUES[i]) == currentSpeed) checked = i;
-            }
-            new android.app.AlertDialog.Builder(activity)
-                    .setTitle(Nx.t("Oynatma hızı", "Playback speed"))
-                    .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                        float speed = parseSpeed(SPEED_VALUES[which]);
-                        // Picked by the user, so it may be remembered like a choice in YouTube's menu.
-                        speedMethodInvoke(speed);
-                        dialog.dismiss();
-                    })
-                    .show();
-            return true;
+            if (Features.has(Features.SPEED_MENU) && Nx.bool(NxSettings.SPEED_MENU)) return Math.max(max, 400);
         } catch (Throwable t) {
-            Nx.log("Speed menu failed", t);
-            return false;
+            Nx.log("Speed limit failed", t);
         }
-    }
-
-    private static void speedMethodInvoke(float speed) {
-        try {
-            Object p = player.get();
-            if (p != null && speedMethod != null) speedMethod.invoke(p, speed);
-        } catch (Throwable t) {
-            Nx.log("Speed failed", t);
-        }
+        return max;
     }
 
     private static void applyDefaultSpeed() {
@@ -190,7 +154,6 @@ public final class Video {
 
     /** Injection point: the player speed changes, by the user or by the app. */
     public static void onSpeedSet(float speed) {
-        if (speed > 0f) currentSpeed = speed;
         if (settingSpeed || !Features.has(Features.QUALITY) || !Nx.bool(NxSettings.REMEMBER_SPEED)) return;
         // Changes right after a video starts come from the app, not the user.
         if (SystemClock.elapsedRealtime() - newVideoAt < 2500) return;
