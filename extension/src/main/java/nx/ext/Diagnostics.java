@@ -73,6 +73,21 @@ public final class Diagnostics {
         add(Nx.t("Jeton üretim hatası: ", "Token minting error: ") + text);
     }
 
+    private static int spoofCount;
+    private static String lastSpoofProblem;
+
+    /** The playback fix replaced a video's streams, or could not. */
+    public static void onSpoof(String videoId, boolean ok, String problem) {
+        if (ok) {
+            spoofCount++;
+            return;
+        }
+        String text = (videoId == null ? "" : videoId + ": ") + problem;
+        if (text.equals(lastSpoofProblem)) return;
+        lastSpoofProblem = text;
+        add(Nx.t("Akış düzeltmesi yapılamadı: ", "Playback fix failed: ") + text);
+    }
+
     /** YouTube found no session PoToken. */
     public static void onPoTokenMissing() {
         missingCount++;
@@ -100,6 +115,8 @@ public final class Diagnostics {
         lastTokenAt = 0;
         lastTokenSize = -1;
         lastError = null;
+        lastSpoofProblem = null;
+        spoofCount = 0;
         tokenCount = 0;
         missingCount = 0;
     }
@@ -113,6 +130,10 @@ public final class Diagnostics {
             String time = new SimpleDateFormat("HH:mm:ss", Locale.US).format(new Date(lastTokenAt));
             sb.append(Nx.t("Son jeton: ", "Last token: ")).append(time).append(" — ")
                     .append(lastTokenSize > 0 ? lastTokenSize + Nx.t(" bayt ✓", " bytes ✓") : Nx.t("BOŞ ✗", "EMPTY ✗"));
+        }
+        if (Features.has(Features.SPOOF_STREAMS)) {
+            sb.append('\n').append(Nx.t("Akış düzeltmesi: ", "Playback fix: "))
+                    .append(Nx.bool(NxSettings.SPOOF_STREAMS) ? spoofCount + Nx.t(" video", " videos") : Nx.t("kapalı", "off"));
         }
         sb.append('\n').append(Nx.t("Jeton okuma: ", "Token reads: ")).append(tokenCount)
                 .append(Nx.t(", jetonsuz: ", ", missing: ")).append(missingCount);

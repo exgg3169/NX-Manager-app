@@ -63,6 +63,7 @@ public final class Video {
                 Nx.log("Listener failed", t);
             }
         }
+        StreamSpoof.prefetch(id);
         if (Features.has(Features.SPONSORBLOCK)) SponsorBlock.onNewVideo(id);
         if (Features.has(Features.QUALITY)) applyDefaultSpeed();
     }

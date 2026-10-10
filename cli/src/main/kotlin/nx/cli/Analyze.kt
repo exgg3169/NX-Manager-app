@@ -82,6 +82,14 @@ object Analyze {
         }
     }
 
+    /** Maps protobuf field numbers of a lite message class to its Java fields. */
+    fun protoInfo(apk: File, type: String) {
+        val cls = classes(apk).first { it.type == type }
+        for ((number, name) in nx.patcher.ProtoInfo.fieldNumbers(cls)) {
+            println("$number -> $name : ${cls.fields.first { it.name == name }.type}")
+        }
+    }
+
     /** Disassembles a whole class to smali. */
     fun dump(apk: File, type: String) {
         val c = classes(apk).firstOrNull { it.type == type } ?: error("class not found: $type")
