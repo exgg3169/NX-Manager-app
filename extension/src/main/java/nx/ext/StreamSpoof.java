@@ -63,6 +63,7 @@ public final class StreamSpoof {
             if (original == null || !Features.has(Features.SPOOF_STREAMS) || !Nx.bool(NxSettings.SPOOF_STREAMS)) return original;
             String videoId = (String) playerResponse.getClass().getMethod("nxVideoId").invoke(playerResponse);
             if (videoId == null || videoId.isEmpty()) return original;
+            lastReplaced = false;
 
             Entry entry = cached(videoId);
             if (entry == null) {
@@ -75,6 +76,7 @@ public final class StreamSpoof {
             }
             if (entry.streamingData == null) return original;
             Object replacement = parse(original.getClass(), entry.streamingData);
+            lastReplaced = true;
             Diagnostics.onSpoof(videoId, true, null);
             return replacement;
         } catch (Throwable t) {
@@ -88,6 +90,48 @@ public final class StreamSpoof {
         synchronized (cache) {
             cache.clear();
         }
+    }
+
+    /** Whether the stream data of the latest player response was replaced. */
+    private static volatile boolean lastReplaced;
+
+    private static boolean enabled() {
+        return Features.has(Features.SPOOF_STREAMS) && Nx.bool(NxSettings.SPOOF_STREAMS);
+    }
+
+    /** Injection point: YouTube's native player streams only over SABR, so skip it for replaced streams. */
+    public static boolean disablePlatypus() {
+        try {
+            return lastReplaced && enabled();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** Injection point: a feature flag that conflicts with replaced streams; off while the fix is on. */
+    public static boolean flag(boolean value) {
+        try {
+            return value && !enabled();
+        } catch (Throwable t) {
+            return value;
+        }
+    }
+
+    /**
+     * Injection point: a media request is built. YouTube posts a body made for its own streams;
+     * the replacement streams reject it, so it is dropped.
+     */
+    public static byte[] mediaRequestBody(android.net.Uri uri, int method, byte[] body) {
+        try {
+            final int post = 2;
+            if (body != null && method == post && lastReplaced && enabled()) {
+                String path = uri == null ? null : uri.getPath();
+                if (path != null && path.contains("videoplayback")) return null;
+            }
+        } catch (Throwable t) {
+            Nx.log("Media request hook failed", t);
+        }
+        return body;
     }
 
     private static Entry cached(String videoId) {

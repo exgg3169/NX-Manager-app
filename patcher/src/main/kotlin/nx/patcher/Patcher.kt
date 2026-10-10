@@ -134,6 +134,7 @@ object Patcher {
         changes += ctx.dex.writeModified { log("  $it") }
         var nextIndex = ctx.dex.dexes.size + 1
         ctx.extraDex.forEach { changes["classes${nextIndex++}.dex"] = it }
+        ctx.dex.overflow.forEach { changes["classes${nextIndex++}.dex"] = it }
         return changes
     }
 

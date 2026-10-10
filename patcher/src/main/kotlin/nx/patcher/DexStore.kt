@@ -104,14 +104,49 @@ class DexStore(entries: List<Pair<String, ByteArray>>) {
         return count
     }
 
+    /**
+     * Dex files for classes moved out of a dex that hooks pushed over the 65536 reference limit.
+     * Filled by [writeModified]; the caller stores them as additional `classesN.dex` entries.
+     */
+    val overflow = ArrayList<ByteArray>()
+
     /** Serializes the dex files that changed, keyed by entry name. */
-    fun writeModified(onWrite: (String) -> Unit = {}): Map<String, ByteArray> =
-        dexes.filter { it.modified }.associate { dex ->
+    fun writeModified(onWrite: (String) -> Unit = {}): Map<String, ByteArray> {
+        overflow.clear()
+        val moved = ArrayList<ClassDef>()
+        val result = dexes.filter { it.modified }.associate { dex ->
             onWrite(dex.name)
-            val pool = DexPool(dex.file.opcodes)
-            dex.classes.forEach(pool::internClass)
-            val store = MemoryDataStore()
-            pool.writeTo(store)
-            dex.name to store.data.copyOf(store.size)
+            val bytes = try {
+                write(dex.file.opcodes, dex.classes)
+            } catch (e: Exception) {
+                if (!isReferenceOverflow(e)) throw e
+                // Hooks added references; move the edited classes to a dex of their own.
+                val edited = dex.classes.filter { it is EditableClass }
+                onWrite("${dex.name}: ${edited.size} değişen sınıf ayrı dex'e taşındı (65536 sınırı)")
+                moved += edited
+                write(dex.file.opcodes, dex.classes.filter { it !is EditableClass })
+            }
+            dex.name to bytes
         }
+        if (moved.isNotEmpty()) overflow += write(dexes.first().file.opcodes, moved)
+        return result
+    }
+
+    private fun write(opcodes: com.android.tools.smali.dexlib2.Opcodes, classes: List<ClassDef>): ByteArray {
+        val pool = DexPool(opcodes)
+        classes.forEach(pool::internClass)
+        val store = MemoryDataStore()
+        pool.writeTo(store)
+        return store.data.copyOf(store.size)
+    }
+
+    private fun isReferenceOverflow(e: Throwable): Boolean {
+        var cur: Throwable? = e
+        while (cur != null) {
+            val m = cur.message ?: ""
+            if ("out of range" in m || "too many" in m.lowercase() || "index is too large" in m.lowercase()) return true
+            cur = cur.cause
+        }
+        return false
+    }
 }
