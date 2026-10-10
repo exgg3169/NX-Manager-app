@@ -127,6 +127,16 @@ public final class NxSettings {
             Nx.t("Video akışı düzeltmesi", "Fix video playback"),
             Nx.t("Videolar durursa veya açılmazsa açık tutun", "Keep on if videos stop or do not start"), true);
 
+    static {
+        feature = "background";
+    }
+
+    public static final Setting BACKGROUND = bool("background", PLAYBACK,
+            Nx.t("Arka planda oynatma", "Background playback"),
+            Nx.t("Uygulamadan çıkınca veya ekran kapanınca video çalmaya devam eder", "Videos keep playing when you leave the app or turn the screen off"), true);
+    public static final Setting BACKGROUND_SHORTS = bool("background_shorts", PLAYBACK,
+            Nx.t("Shorts için arka planda oynatma", "Background playback for Shorts"), null, true);
+
     // endregion
 
     // region Return YouTube Dislike

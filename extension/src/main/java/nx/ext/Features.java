@@ -13,6 +13,8 @@ public final class Features {
     public static final String SHORTS = "shorts";
     public static final String QUALITY = "quality";
     public static final String SPOOF_STREAMS = "spoof_streams";
+    public static final String RYD = "ryd";
+    public static final String BACKGROUND = "background";
     public static final String SPEED_MENU = "speed_menu";
     public static final String SPONSORBLOCK = "sponsorblock";
     public static final String DIAGNOSTICS = "diagnostics";

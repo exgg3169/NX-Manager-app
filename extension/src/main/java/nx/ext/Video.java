@@ -64,6 +64,7 @@ public final class Video {
             }
         }
         StreamSpoof.prefetch(id);
+        Ryd.fetch(id);
         if (Features.has(Features.SPONSORBLOCK)) SponsorBlock.onNewVideo(id);
         if (Features.has(Features.QUALITY)) applyDefaultSpeed();
     }

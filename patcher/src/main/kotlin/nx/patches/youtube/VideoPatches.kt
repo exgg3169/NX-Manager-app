@@ -381,3 +381,36 @@ object SpeedMenuPatch : Patch {
         ctx.log("  Hız paneli yakalama: ${binder.definingClass}-><init>")
     }
 }
+
+/**
+ * Return YouTube Dislike: like and dislike counts from returnyoutubedislike.com, drawn over the
+ * icon-only like and dislike buttons of the watch page.
+ */
+object ReturnYouTubeDislikePatch : Patch {
+    override val id = "youtube-return-dislike"
+    override val title = "Return YouTube Dislike"
+    override val description = "Beğenme ve beğenmeme sayılarını (returnyoutubedislike.com) video sayfasındaki düğmelerde gösterir."
+    override val packageName = YouTube.PACKAGE
+    override val testedVersions = YouTube.TESTED_VERSIONS
+    override val dependencies = listOf(VideoInfoPatch, SettingsPatch)
+
+    private const val COMPONENT_HOST = "Lcom/facebook/litho/ComponentHost;"
+    private const val HOOK = "Lnx/ext/Ryd;->onContentDescription(Landroid/view/View;Ljava/lang/CharSequence;)V"
+
+    override fun apply(ctx: PatchContext) {
+        ctx.manifest.addFeature("ryd")
+        // Litho views get their accessibility description when bound; buttons are tagged by then.
+        val method = ctx.dex.edit(COMPONENT_HOST).methodList.singleOrNull {
+            it.name == "setContentDescription" && it.parameterTypes.map(Any::toString) == listOf("Ljava/lang/CharSequence;")
+        } ?: throw PatchException("ComponentHost.setContentDescription not found")
+        val code = method.code
+        val first = code.parameterRegister(method, 0)
+        code.insertAtTarget(
+            0,
+            listOf(com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction3rc(
+                Opcode.INVOKE_STATIC_RANGE, first, 2, parseMethodReference(HOOK),
+            )),
+        )
+        ctx.log("  Düğme kancası: ComponentHost.setContentDescription")
+    }
+}
