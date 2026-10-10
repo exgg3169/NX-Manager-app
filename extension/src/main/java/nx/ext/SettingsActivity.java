@@ -45,6 +45,8 @@ public final class SettingsActivity extends Activity {
         list.addView(text(Nx.t("Değişikliklerin çoğu bir sonraki videoda geçerli olur. Bazıları için uygulamayı yeniden başlatın.",
                 "Most changes apply from the next video. Some need an app restart."), 13, false));
 
+        if (Features.has(Features.DIAGNOSTICS)) addDiagnostics();
+
         String section = null;
         for (NxSettings.Setting s : NxSettings.ALL) {
             if (s.feature != null && !Features.has(s.feature)) continue;
@@ -69,6 +71,49 @@ public final class SettingsActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(24);
         list.addView(restart, lp);
+    }
+
+    /** Test panel: token state, recent player errors and a microG service check. */
+    private void addDiagnostics() {
+        TextView title = text(Nx.t("Tanılama / Test", "Diagnostics / Test"), 15, true);
+        title.setTextColor(accent());
+        title.setPadding(0, dp(24), 0, dp(4));
+        list.addView(title);
+        list.addView(text(Nx.t("Bir video açın, durana kadar izleyin, sonra buraya dönüp ekran görüntüsü alın.",
+                "Play a video until it stops, then come back here and take a screenshot."), 13, false));
+
+        final TextView report = text(Diagnostics.report(), 13, false);
+        report.setTypeface(Typeface.MONOSPACE);
+        report.setTextIsSelectable(true);
+        report.setPadding(0, dp(8), 0, dp(8));
+        list.addView(report);
+
+        final TextView serviceResult = text("", 13, true);
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        Button test = new Button(this);
+        test.setText(Nx.t("microG jeton servisini test et", "Test microG token service"));
+        test.setOnClickListener(v -> {
+            serviceResult.setText(Nx.t("Test ediliyor…", "Testing…"));
+            Diagnostics.testTokenService(getApplicationContext(), message -> runOnUiThread(() -> {
+                serviceResult.setText(message);
+                report.setText(Diagnostics.report());
+            }));
+        });
+        Button refresh = new Button(this);
+        refresh.setText(Nx.t("Yenile", "Refresh"));
+        refresh.setOnClickListener(v -> report.setText(Diagnostics.report()));
+        Button clear = new Button(this);
+        clear.setText(Nx.t("Temizle", "Clear"));
+        clear.setOnClickListener(v -> {
+            Diagnostics.clear();
+            report.setText(Diagnostics.report());
+        });
+        buttons.addView(refresh);
+        buttons.addView(clear);
+        list.addView(test);
+        list.addView(serviceResult);
+        list.addView(buttons);
     }
 
     private View switchRow(final NxSettings.Setting s) {

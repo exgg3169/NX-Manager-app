@@ -250,3 +250,53 @@ object SponsorBlockPatch : Patch {
         ctx.log("  Segmentler video açılınca indirilir, oynatma sırasında atlanır")
     }
 }
+
+/**
+ * Adds a "Diagnostics / Test" panel to the NX settings: whether YouTube gets its playback
+ * attestation token (PoToken) from microG, and the player errors that stop videos.
+ */
+object DiagnosticsPatch : Patch {
+    override val id = "youtube-diagnostics"
+    override val title = "Tanılama (test)"
+    override val description = "Videolar neden duruyor? NX Ayarları'nda jeton (PoToken) durumunu ve oynatıcı " +
+        "hata kodlarını gösterir, microG jeton servisini test eder."
+    override val packageName = YouTube.PACKAGE
+    override val testedVersions = YouTube.TESTED_VERSIONS
+    override val dependencies = listOf(SettingsPatch)
+
+    private const val TOKEN_MANAGER =
+        "Lcom/google/android/libraries/youtube/media/player/exo2/platypus/PlatypusProofOfOriginTokenManager;"
+    private const val DIAG = "Lnx/ext/Diagnostics;"
+
+    override fun apply(ctx: PatchContext) {
+        ctx.manifest.addFeature("diagnostics")
+        val manager = ctx.dex.edit(TOKEN_MANAGER)
+        // Reads the session token: () -> byte[].
+        val read = manager.methodList.singleOrNull { it.returnType == "[B" && it.parameterTypes.isEmpty() }
+            ?: throw PatchException("PoToken read method not found")
+        val code = read.code
+
+        // The error reported when there is no token names the player error class.
+        val missing = code.instructions.indexOfFirst { it.stringValue == "potoken.nulloninit" }
+        if (missing < 0) throw PatchException("PoToken missing report not found")
+        val errorClass = code.instructions.drop(missing).firstNotNullOfOrNull { ins ->
+            ins.methodRef?.takeIf { it.name == "<init>" && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/String;") }
+        }?.definingClass ?: throw PatchException("Player error class not found")
+
+        for (index in code.returnIndexes().asReversed()) {
+            val register = (code.instructions[index] as OneRegisterInstruction).registerA
+            code.insertAtTarget(index, listOf(invokeStaticRange(register, "$DIAG->onPoToken([B)V")))
+        }
+        val missingNow = code.instructions.indexOfFirst { it.stringValue == "potoken.nulloninit" }
+        code.insertAt(missingNow, listOf(invokeStaticRange(0, "$DIAG->onPoTokenMissing()V")))
+
+        // Every player error passes its code to this constructor.
+        val errorInit = ctx.dex.edit(errorClass).methodList.singleOrNull {
+            it.name == "<init>" && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/String;")
+        } ?: throw PatchException("Player error constructor not found")
+        errorInit.code.let { c ->
+            c.insertAt(0, listOf(invokeStaticRange(c.parameterRegister(errorInit, 1), "$DIAG->onPlayerError(Ljava/lang/String;)V")))
+        }
+        ctx.log("  Jeton: ${read.name}(), oynatıcı hataları: $errorClass")
+    }
+}

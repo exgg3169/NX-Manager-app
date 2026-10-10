@@ -16,5 +16,5 @@ object YouTube {
 
     val TESTED_VERSIONS = setOf("21.16.256")
 
-    val patches: List<Patch> = listOf(GmsCorePatch, AppNamePatch, SettingsPatch, VideoAdsPatch, FeedAdsPatch, HideShortsPatch, QualitySpeedPatch, SponsorBlockPatch, BackgroundPlaybackPatch)
+    val patches: List<Patch> = listOf(GmsCorePatch, AppNamePatch, SettingsPatch, VideoAdsPatch, FeedAdsPatch, HideShortsPatch, QualitySpeedPatch, SponsorBlockPatch, BackgroundPlaybackPatch, DiagnosticsPatch)
 }

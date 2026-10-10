@@ -13,6 +13,7 @@ public final class Features {
     public static final String SHORTS = "shorts";
     public static final String QUALITY = "quality";
     public static final String SPONSORBLOCK = "sponsorblock";
+    public static final String DIAGNOSTICS = "diagnostics";
 
     private static String list;
 

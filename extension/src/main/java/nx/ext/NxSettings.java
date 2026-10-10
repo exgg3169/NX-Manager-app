@@ -158,4 +158,16 @@ public final class NxSettings {
             Nx.t("Müzik videolarında müzik olmayan kısım", "Non-music section in music videos"), null, true);
 
     // endregion
+
+    // region Diagnostics
+
+    static {
+        feature = Features.DIAGNOSTICS;
+    }
+
+    public static final Setting DIAG_TOASTS = bool("diag_toasts", Nx.t("Tanılama", "Diagnostics"),
+            Nx.t("Oynatıcı hatalarını anında göster", "Show player errors instantly"),
+            Nx.t("Video durduğunda hata kodu ekranda kısa süre görünür", "When a video stops, its error code is shown briefly"), true);
+
+    // endregion
 }
