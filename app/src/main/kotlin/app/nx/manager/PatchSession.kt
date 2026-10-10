@@ -21,6 +21,8 @@ import java.io.File
 data class UiState(
     val apk: ApkInfo? = null,
     val loading: Boolean = false,
+    /** Why the selected APK cannot be patched (wrong app, broken download…), or null. */
+    val apkProblem: String? = null,
     val selected: Set<String> = YouTube.patches.filter { it.enabledByDefault }.map { it.id }.toSet(),
     val packageName: String = PatchOptions().packageName,
     val running: Boolean = false,
@@ -50,12 +52,15 @@ object PatchSession {
                     file.outputStream().use { input.copyTo(it, 1 shl 16) }
                 }
                 val info = Patcher.inspect(file)
-                val error = if (info.packageName != YouTube.PACKAGE) {
+                val problem = if (info.packageName != YouTube.PACKAGE) {
                     "Bu bir YouTube APK'sı değil (${info.packageName})."
-                } else null
-                _state.update { it.copy(apk = info, loading = false, error = error) }
+                } else {
+                    // A broken download only fails late while repackaging, so check every byte now.
+                    Patcher.verify(file, YouTube.SIGNING_CERTS)
+                }
+                _state.update { it.copy(apk = info, loading = false, apkProblem = problem) }
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = "APK okunamadı: ${e.message}") }
+                _state.update { it.copy(loading = false, apkProblem = "APK okunamadı, dosya bozuk olabilir: ${e.message}") }
             }
         }
     }

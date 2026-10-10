@@ -108,9 +108,16 @@ private fun Screen() {
                 Button(onClick = { pickApk.launchApkPicker() }, enabled = !state.running && !state.loading) {
                     Text("APK seç")
                 }
-                if (state.loading) CircularProgressIndicator(Modifier.size(24.dp))
+                if (state.loading) {
+                    CircularProgressIndicator(Modifier.size(24.dp))
+                    Text("Okunuyor ve doğrulanıyor…")
+                }
             }
             state.apk?.let { Text("${it.packageName}  •  ${it.versionName}", fontFamily = FontFamily.Monospace, fontSize = 13.sp) }
+            state.apkProblem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (state.apk != null && state.apkProblem == null) {
+                Text("APK sağlam, orijinal Google imzalı ✓", color = MaterialTheme.colorScheme.primary)
+            }
             if (state.apk != null && state.apk?.versionName !in YouTube.TESTED_VERSIONS) {
                 Text("Bu sürüm denenmedi; çalışmayabilir.", color = MaterialTheme.colorScheme.error)
             }
@@ -144,7 +151,7 @@ private fun Screen() {
         }
 
         Section("3. Oluştur") {
-            val ready = state.apk?.packageName == YouTube.PACKAGE && state.selected.isNotEmpty() && !state.running
+            val ready = state.apk != null && state.apkProblem == null && state.selected.isNotEmpty() && !state.running
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { PatchSession.start(context) }, enabled = ready) { Text("Patch'le") }
                 if (state.running) CircularProgressIndicator(Modifier.size(24.dp))

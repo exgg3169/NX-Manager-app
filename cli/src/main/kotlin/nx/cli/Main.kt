@@ -19,6 +19,7 @@ fun main(args: Array<String>) {
             ) { println(it) }
             println("Süre: ${(System.currentTimeMillis() - start) / 1000}s")
         }
+        "verify" -> println(Patcher.verify(File(args[1]), YouTube.SIGNING_CERTS) ?: "OK")
         "grep" -> Analyze.grep(File(args[1]), args[2])
         "dump" -> Analyze.dump(File(args[1]), args[2])
         else -> println("usage: patch <in.apk> <out.apk> [keyDir] | grep <apk> <regex> | dump <apk> <Lclass;>")

@@ -1,6 +1,8 @@
 package nx.patcher
 
+import com.android.apksig.ApkVerifier
 import java.io.File
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 /** Basic facts about an APK, read without patching it. */
@@ -12,6 +14,30 @@ object Patcher {
     fun inspect(apk: File): ApkInfo = ZipFile(apk).use { zip ->
         val manifest = Manifest(zip.read("AndroidManifest.xml"))
         ApkInfo(manifest.packageName, manifest.versionName)
+    }
+
+    /**
+     * Checks that [apk] is complete and unmodified by verifying its signature over every byte.
+     * Returns a problem description, or null when it is intact and signed by one of [trustedCerts]
+     * (SHA-256 of the signing certificate; empty accepts any signer).
+     */
+    fun verify(apk: File, trustedCerts: Set<String> = emptySet()): String? {
+        val result = try {
+            ApkVerifier.Builder(apk).build().verify()
+        } catch (e: Exception) {
+            return "APK okunamadı, dosya bozuk olabilir (${e.message})"
+        }
+        if (!result.isVerified) {
+            val reason = result.allErrors.firstOrNull()?.toString().orEmpty()
+            return "APK bozuk veya değiştirilmiş; yeniden indirin. $reason".trim()
+        }
+        if (trustedCerts.isNotEmpty()) {
+            val digests = result.signerCertificates.map { cert ->
+                MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString("") { "%02x".format(it) }
+            }
+            if (digests.none { it in trustedCerts }) return "APK geçerli ama orijinal imzayla imzalanmamış"
+        }
+        return null
     }
 
     /**
