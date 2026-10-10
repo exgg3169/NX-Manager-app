@@ -27,6 +27,10 @@ class Manifest(bytes: ByteArray) {
     fun stringAttr(element: ResXmlElement, id: Int): String? =
         attr(element, id)?.takeIf { it.valueType == ValueType.STRING }?.valueAsString
 
+    /** The resource id an attribute refers to (e.g. `@mipmap/ic_launcher`), or null. */
+    fun referenceAttr(element: ResXmlElement, id: Int): Int? =
+        attr(element, id)?.takeIf { it.valueType == ValueType.REFERENCE }?.data
+
     fun setStringAttr(element: ResXmlElement, id: Int, value: String) {
         element.getOrCreateAndroidAttribute(attrNames.getValue(id), id).valueAsString = value
     }
@@ -133,6 +137,8 @@ class Manifest(bytes: ByteArray) {
 
     companion object {
         const val LABEL = 0x01010001
+        const val ICON = 0x01010002
+        const val ROUND_ICON = 0x0101052c
         const val NAME = 0x01010003
         const val EXPORTED = 0x01010010
         const val PERMISSION = 0x01010006

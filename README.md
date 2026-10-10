@@ -10,7 +10,7 @@ Morphe/ReVanced'ın **fikri** incelenerek sıfırdan yazıldı; onların kodu ku
 | **GmsCore (microG) desteği** | Paket adını `app.nx.android.youtube` yapar (orijinal YouTube ile yan yana durur), Google Play Hizmetleri yerine microG'yi kullanır, microG yoksa uyarı gösterir. |
 | **Arka planda oynatma** | Uygulamadan çıkınca / ekran kapanınca video çalmaya devam eder; Shorts ve çocuk videoları dahil. YouTube ayarlarındaki "Arka planda oynatma" seçeneği de açılır. |
 | **NX ayarları** | YouTube Ayarlar'ın en üstüne "NX Ayarları" ekler; özellikler buradan açılıp kapatılır. |
-| **Uygulama adı** | Ana ekranda "NX YouTube" (değiştirilebilir) adıyla görünür. |
+| **Uygulama adı ve simgesi** | Ana ekranda "NX YouTube" (değiştirilebilir) adıyla ve NX simgesiyle görünür. |
 | **Akış reklamlarını gizle** | Ana sayfa / arama / izleme sayfasındaki reklam kartları, Premium tanıtımları, alışveriş rafları. |
 | **Shorts'u gizle** | Alt menüdeki Shorts düğmesi ve akıştaki Shorts rafları. |
 | **Varsayılan kalite ve hız** | Wi-Fi ve mobil veri için ayrı kalite; varsayılan hız ve seçilen hızı hatırlama. |

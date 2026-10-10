@@ -17,8 +17,21 @@ class PatchContext(
     val options: PatchOptions,
     private val resourceIds: Map<String, Int>,
     private val xmlFiles: Map<String, Pair<String, ByteArray>>,
+    /** The launcher icon's files, when a patch set [Patch.usesLauncherIcon]. */
+    val launcherIcon: LauncherIcon?,
     private val logger: (String) -> Unit,
 ) {
+    private val fileChanges = LinkedHashMap<String, ByteArray>()
+
+    /** Replaces a file of the APK, e.g. a resource image. */
+    fun replaceFile(path: String, bytes: ByteArray) {
+        fileChanges[path] = bytes
+    }
+
+    /** Reads a resource shipped inside the patcher. */
+    fun bundled(resource: String): ByteArray = javaClass.getResourceAsStream(resource)?.use { it.readBytes() }
+        ?: throw PatchException("Missing bundled file $resource")
+
     private val openXml = LinkedHashMap<String, ResXmlDocument>()
 
     /** A binary XML resource declared in [Patch.xmlResources], e.g. `xml("xml/settings_fragment")`. */
@@ -28,7 +41,7 @@ class PatchContext(
     }
 
     /** Modified XML resources by path in the APK. */
-    internal fun xmlChanges(): Map<String, ByteArray> = openXml.mapValues { (_, doc) ->
+    internal fun xmlChanges(): Map<String, ByteArray> = fileChanges + openXml.mapValues { (_, doc) ->
         doc.refreshFull()
         doc.bytes
     }
@@ -68,6 +81,9 @@ interface Patch {
     /** Resources the patch looks up by name (`type/name`), resolved before the code is loaded. */
     val resources: List<String> get() = emptyList()
 
+    /** Set when the patch replaces the launcher icon; its files are then found from the manifest. */
+    val usesLauncherIcon: Boolean get() = false
+
     /** XML resource files the patch edits (`type/name`, e.g. `xml/settings_fragment`). */
     val xmlResources: List<String> get() = emptyList()
 
@@ -76,3 +92,13 @@ interface Patch {
 
     fun apply(ctx: PatchContext)
 }
+
+/**
+ * Files of the app's adaptive launcher icon. [xmlNames] are keys for [PatchContext.xml];
+ * [foreground] and [background] map a screen density (e.g. "xxhdpi") to the layer image in the APK.
+ */
+class LauncherIcon(
+    val xmlNames: List<String>,
+    val foreground: Map<String, String>,
+    val background: Map<String, String>,
+)

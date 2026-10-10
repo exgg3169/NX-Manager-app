@@ -56,16 +56,32 @@ object SettingsPatch : Patch {
     }
 }
 
-/** Shows the patched app under its own name on the home screen. */
+/** Shows the patched app under its own name and the NX icon on the home screen. */
 object AppNamePatch : Patch {
     override val id = "youtube-app-name"
-    override val title = "Uygulama adı"
-    override val description = "Ana ekranda uygulamayı kendi adıyla gösterir (varsayılan: NX YouTube)."
+    override val title = "Uygulama adı ve simgesi"
+    override val description = "Ana ekranda uygulamayı kendi adıyla (varsayılan: NX YouTube) ve NX simgesiyle gösterir."
     override val packageName = YouTube.PACKAGE
     override val testedVersions = YouTube.TESTED_VERSIONS
+    override val usesLauncherIcon = true
 
     override fun apply(ctx: PatchContext) {
         ctx.manifest.setLauncherLabel(ctx.options.appName)
         ctx.log("  Ad: ${ctx.options.appName}")
+
+        val icon = ctx.launcherIcon ?: return ctx.log("  Uyarı: simge bulunamadı, YouTube simgesi kaldı")
+        for ((layers, prefix) in listOf(icon.foreground to "fg", icon.background to "bg")) {
+            for ((density, path) in layers) {
+                // Unknown densities get the closest larger image.
+                val file = densityFallback(density).first { javaClass.getResource("/nx/icon/${prefix}_$it.png") != null }
+                ctx.replaceFile(path, ctx.bundled("/nx/icon/${prefix}_$file.png"))
+            }
+        }
+        // Android 13+ themed icons would still show the YouTube shape.
+        for (name in icon.xmlNames) ctx.xml(name).documentElement.removeElementsIf { it.name == "monochrome" }
+        ctx.log("  Simge: ${icon.foreground.size + icon.background.size} katman resmi değiştirildi")
     }
+
+    private fun densityFallback(density: String): List<String> =
+        listOf(density, "xxxhdpi", "xxhdpi", "xhdpi", "hdpi", "mdpi")
 }

@@ -106,14 +106,17 @@ object Patcher {
                 zip, manifest.packageName,
                 patches.flatMap { it.resources }.toSet(), patches.flatMap { it.xmlResources }.toSet(),
             )
-            val xmlFiles = xmlPaths.mapValues { (_, path) -> path to zip.read(path) }
+            val xmlFiles = xmlPaths.mapValues { (_, path) -> path to zip.read(path) }.toMutableMap()
+            val launcherIcon = if (patches.any { it.usesLauncherIcon }) {
+                resolveLauncherIcon(zip, manifest, xmlFiles, log)
+            } else null
             val dexEntries = zip.entries().asSequence()
                 .mapNotNull { e -> dexName.matchEntire(e.name)?.let { e.name to (it.groupValues[1].toIntOrNull() ?: 1) } }
                 .sortedBy { it.second }
                 .map { (name, _) -> name to zip.read(name) }
                 .toList()
             log("${dexEntries.size} dex dosyası okunuyor…")
-            PatchContext(DexStore(dexEntries), manifest, options, resourceIds, xmlFiles, log)
+            PatchContext(DexStore(dexEntries), manifest, options, resourceIds, xmlFiles, launcherIcon, log)
         }
 
         log("Kod taranıyor…")
@@ -154,6 +157,60 @@ object Patcher {
         }.toMap()
         return idMap to fileMap
     }
+
+    /**
+     * Follows the manifest's icon and round icon to their adaptive icon XML files and the
+     * foreground and background images per density. Adds the XML files to [xmlFiles].
+     */
+    private fun resolveLauncherIcon(
+        zip: ZipFile,
+        manifest: Manifest,
+        xmlFiles: MutableMap<String, Pair<String, ByteArray>>,
+        log: (String) -> Unit,
+    ): LauncherIcon? {
+        val ids = listOf(Manifest.ICON, Manifest.ROUND_ICON).mapNotNull { manifest.referenceAttr(manifest.application, it) }
+        if (ids.isEmpty()) return null
+        val table = zip.getInputStream(zip.getEntry("resources.arsc")).use { TableBlock.load(it) }
+        fun files(id: Int): Map<String, String> {
+            val entry = table.getResource(id) ?: return emptyMap()
+            return entry.mapNotNull { e ->
+                val path = e.resValue?.valueAsString?.takeIf { it.startsWith("res/") } ?: return@mapNotNull null
+                val qualifiers = e.resConfig?.qualifiers.orEmpty()
+                val density = DENSITIES.firstOrNull { qualifiers.split('-').contains(it) } ?: "anydpi"
+                density to path
+            }.toMap()
+        }
+        val xmlNames = mutableListOf<String>()
+        var foreground = emptyMap<String, String>()
+        var background = emptyMap<String, String>()
+        for (id in ids) {
+            for (path in files(id).values.filter { it.endsWith(".xml") }) {
+                val name = "launcher-icon:$path"
+                val bytes = zip.read(path)
+                xmlFiles[name] = path to bytes
+                xmlNames += name
+                val doc = com.reandroid.arsc.chunk.xml.ResXmlDocument().apply { readBytes(java.io.ByteArrayInputStream(bytes)) }
+                for (layer in doc.documentElement.elements.asSequence()) {
+                    val ref = layer.searchAttributeByResourceId(DRAWABLE)?.takeIf {
+                        it.valueType == com.reandroid.arsc.value.ValueType.REFERENCE
+                    }?.data ?: continue
+                    val layerFiles = files(ref).filterValues { it.endsWith(".png") || it.endsWith(".webp") }
+                    when (layer.name) {
+                        "foreground" -> foreground = layerFiles
+                        "background" -> background = layerFiles
+                    }
+                }
+            }
+        }
+        if (xmlNames.isEmpty() || foreground.isEmpty() || background.isEmpty()) {
+            log("Uyarı: simge katmanları resim değil, simge değiştirilemeyecek")
+            return null
+        }
+        return LauncherIcon(xmlNames, foreground, background)
+    }
+
+    private val DENSITIES = listOf("ldpi", "mdpi", "tvdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
+    private const val DRAWABLE = 0x01010199
 
     private fun isOldSignature(name: String): Boolean {
         if (!name.startsWith("META-INF/")) return name == "stamp-cert-sha256"
