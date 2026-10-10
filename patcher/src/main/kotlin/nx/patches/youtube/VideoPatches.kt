@@ -27,6 +27,7 @@ import nx.patcher.invokeStaticRange
 import nx.patcher.methodRef
 import nx.patcher.parameterRegister
 import nx.patcher.parseMethodReference
+import nx.patcher.returnEarly
 import nx.patcher.returnIndexes
 import nx.patcher.single
 import nx.patcher.stringValue
@@ -338,50 +339,45 @@ object DiagnosticsPatch : Patch {
 }
 
 /**
- * Unlocks speeds up to 4x in YouTube's playback speed panel. The panel's slider ends at the
- * maximum of a speed config (2x for non-Premium accounts) and preset chips above it are shown
- * as Premium-only; the player itself accepts 0.25x to 4x.
+ * Speeds up to 4x without Premium. YouTube limits the player to a server-provided maximum (2x
+ * for non-Premium accounts) behind a feature flag, and its speed panel offers faster presets
+ * only as a Premium upsell. The flag is turned off and the panel is replaced with NX's own.
  */
 object SpeedMenuPatch : Patch {
     override val id = "youtube-speed-menu"
     override val title = "4x'e kadar hız"
-    override val description = "Oynatma hızı panelinde 2x üstü hızları (3x, 4x) Premium istemeden açar."
+    override val description = "Hız sınırını 4x'e çıkarır ve Premium isteyen hız panelini NX hız paneliyle değiştirir."
     override val packageName = YouTube.PACKAGE
     override val testedVersions = YouTube.TESTED_VERSIONS
+    override val dependencies = listOf(VideoInfoPatch, LithoFilterPatch)
 
-    private const val HOOK = "Lnx/ext/Video;->maxSpeedPercent(I)I"
+    private const val RECYCLER_VIEW = "Landroid/support/v7/widget/RecyclerView;"
+    private const val HOOK = "Lnx/ext/SpeedPanel;->onRecyclerView(Landroid/view/View;)V"
 
-    // Builds the speed panel from the server's speed config, or from a built-in one (0.25x–2x).
-    private val speedPanel = MethodFilter(
-        "Playback speed panel", strings = listOf("0.25", "1.25", "1.5", "2.0"),
-        parameters = listOf("Landroid/content/Context;", "Lj\$/util/Optional;"), isStatic = true,
+    // Feature flag: clamp the speed to the min/max sent by the server instead of 0.25x–4x.
+    private val serverSpeedLimitFlag = MethodFilter(
+        "Server speed limit flag", literals = listOf(45719140L), returnType = "Z", parameters = emptyList(),
     )
 
-    override val filters = listOf(speedPanel)
+    // Binds Litho lists (such as the speed panel) to their RecyclerView.
+    private val lithoListBinder = MethodFilter(
+        "Litho list binder", strings = listOf("LithoRVSLCBinder"), name = "<init>",
+        extra = { m -> m.parameterTypes.any { it.toString() == RECYCLER_VIEW } },
+    )
+
+    override val filters = listOf(serverSpeedLimitFlag, lithoListBinder)
 
     override fun apply(ctx: PatchContext) {
         ctx.manifest.addFeature("speed_menu")
-        val panel = ctx.dex.edit(ctx.dex.single(speedPanel))
-        val code = panel.code
-        val ins = code.instructions
-        // The built-in config stores 200 (2x, in percent) as its maximum.
-        val maxField = ins.indices.firstNotNullOfOrNull { i ->
-            val cur = ins[i]
-            if (cur.opcode != Opcode.IPUT || i == 0) return@firstNotNullOfOrNull null
-            val prev = ins[i - 1] as? com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
-            if (prev?.narrowLiteral == 200) (cur as ReferenceInstruction).reference as FieldReference else null
-        } ?: throw PatchException("Speed panel maximum not found")
-        val reads = ins.indices.filter {
-            ins[it].opcode == Opcode.IGET && (ins[it] as ReferenceInstruction).reference.toString() == maxField.toString()
-        }
-        if (reads.isEmpty()) throw PatchException("Speed panel maximum is never read")
-        for (index in reads.asReversed()) {
-            val register = (ins[index] as TwoRegisterInstruction).registerA
-            listOf(
-                BuilderInstruction35c(Opcode.INVOKE_STATIC, 1, register, 0, 0, 0, 0, parseMethodReference(HOOK)),
-                BuilderInstruction11x(Opcode.MOVE_RESULT, register),
-            ).asReversed().forEach { code.addInstruction(index + 1, it) }
-        }
-        ctx.log("  Hız paneli: ${panel.definingClass}->${panel.name}, üst sınır alanı ${maxField.name} (${reads.size} yer)")
+        val flag = ctx.dex.edit(ctx.dex.single(serverSpeedLimitFlag))
+        flag.returnEarly(false)
+        ctx.log("  Sunucu hız sınırı kapatıldı: ${flag.definingClass}->${flag.name}")
+
+        val binder = ctx.dex.edit(ctx.dex.single(lithoListBinder))
+        val listParam = binder.parameterTypes.indexOfFirst { it.toString() == RECYCLER_VIEW }
+        val code = binder.code
+        // p0 is `this`, so parameter n is p(n + 1).
+        code.insertAtTarget(0, listOf(invokeStaticRange(code.parameterRegister(binder, listParam + 1), HOOK)))
+        ctx.log("  Hız paneli yakalama: ${binder.definingClass}-><init>")
     }
 }

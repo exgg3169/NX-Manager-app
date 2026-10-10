@@ -49,6 +49,7 @@ public final class Litho {
         try {
             String id = identifier == null ? "" : identifier;
             String path = pathBuilder == null ? "" : pathBuilder.toString();
+            SpeedPanel.onComponent(path);
 
             if (Features.has(Features.SHORTS) && Nx.bool(NxSettings.HIDE_SHORTS_SHELF) && (containsAny(id, SHORTS_SHELVES) || containsAny(path, SHORTS_SHELVES))) {
                 return true;

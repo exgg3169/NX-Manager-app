@@ -88,6 +88,15 @@ public final class Diagnostics {
         add(Nx.t("Akış düzeltmesi yapılamadı: ", "Playback fix failed: ") + text);
     }
 
+    private static String lastNote;
+
+    /** A one-off observation worth showing in the report; repeats are skipped. */
+    static void note(String text) {
+        if (text.equals(lastNote)) return;
+        lastNote = text;
+        add(text);
+    }
+
     /** YouTube found no session PoToken. */
     public static void onPoTokenMissing() {
         missingCount++;

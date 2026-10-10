@@ -112,8 +112,8 @@ public final class NxSettings {
     }
 
     public static final Setting SPEED_MENU = bool("speed_menu", VIDEO,
-            Nx.t("4x'e kadar hız", "Speeds up to 4x"),
-            Nx.t("Hız panelinde 2x üstü hızlar (3x, 4x) Premium istemeden kullanılır", "Speeds above 2x (3x, 4x) in the speed panel work without Premium"), true);
+            Nx.t("NX hız paneli (4x'e kadar)", "NX speed panel (up to 4x)"),
+            Nx.t("YouTube'un Premium isteyen hız paneli yerine 0.25x–4x NX panelini açar", "Opens NX's 0.25x–4x panel instead of YouTube's, which asks for Premium"), true);
 
     // endregion
 

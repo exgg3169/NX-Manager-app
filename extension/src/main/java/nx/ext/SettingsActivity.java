@@ -45,6 +45,7 @@ public final class SettingsActivity extends Activity {
         list.addView(text(Nx.t("Değişikliklerin çoğu bir sonraki videoda geçerli olur. Bazıları için uygulamayı yeniden başlatın.",
                 "Most changes apply from the next video. Some need an app restart."), 13, false));
 
+        if (Features.has(Features.SPOOF_STREAMS)) addVrLogin();
         if (Features.has(Features.DIAGNOSTICS)) addDiagnostics();
 
         String section = null;
@@ -71,6 +72,74 @@ public final class SettingsActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(24);
         list.addView(restart, lp);
+    }
+
+    /** Sign-in for the playback fix: YouTube often refuses streams to signed-out VR apps. */
+    private void addVrLogin() {
+        TextView title = text(Nx.t("Video akışı düzeltmesi", "Playback fix"), 15, true);
+        title.setTextColor(accent());
+        title.setPadding(0, dp(24), 0, dp(4));
+        list.addView(title);
+        list.addView(text(Nx.t("YouTube çoğu videoda \"bot olmadığınızı doğrulamak için oturum açın\" diyor. "
+                        + "Bir kez oturum açın: ekranda çıkan kodu google.com/device adresine girin.",
+                "YouTube often says \"sign in to confirm you're not a bot\". Sign in once: enter the code "
+                        + "shown here at google.com/device."), 13, false));
+        final Button button = new Button(this);
+        final Runnable update = () -> button.setText(VrLogin.signedIn()
+                ? Nx.t("Oturum açık ✓ — kapatmak için dokunun", "Signed in ✓ — tap to sign out")
+                : Nx.t("Akış düzeltmesi için oturum aç", "Sign in for the playback fix"));
+        update.run();
+        button.setOnClickListener(v -> {
+            if (VrLogin.signedIn()) {
+                VrLogin.signOut();
+                update.run();
+                return;
+            }
+            button.setEnabled(false);
+            new Thread(() -> {
+                try {
+                    final VrLogin.Code code = VrLogin.requestCode();
+                    final AlertDialog[] dialog = new AlertDialog[1];
+                    runOnUiThread(() -> {
+                        button.setEnabled(true);
+                        TextView codeView = text(code.userCode, 30, true);
+                        codeView.setGravity(Gravity.CENTER);
+                        codeView.setTextIsSelectable(true);
+                        codeView.setPadding(0, dp(16), 0, dp(16));
+                        dialog[0] = new AlertDialog.Builder(this)
+                                .setTitle(Nx.t("Kodu girin", "Enter the code"))
+                                .setMessage(Nx.t("1. Kodu kopyalayın\n2. " + code.verificationUrl + " adresini açın\n3. Kodu girip hesabınızı seçin\nOnaydan sonra bu pencere kendiliğinden kapanır.",
+                                        "1. Copy the code\n2. Open " + code.verificationUrl + "\n3. Enter the code and pick your account\nThis window closes by itself once approved."))
+                                .setView(codeView)
+                                .setPositiveButton(Nx.t("Kopyala ve aç", "Copy and open"), null)
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show();
+                        dialog[0].getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b -> {
+                            android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NX", code.userCode));
+                            try {
+                                startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(code.verificationUrl)));
+                            } catch (Throwable t) {
+                                Nx.toast(code.verificationUrl);
+                            }
+                        });
+                    });
+                    final String error = VrLogin.waitForApproval(code);
+                    runOnUiThread(() -> {
+                        if (dialog[0] != null) dialog[0].dismiss();
+                        update.run();
+                        Nx.toast(error == null ? Nx.t("Oturum açıldı ✓", "Signed in ✓")
+                                : Nx.t("Oturum açılamadı: ", "Sign-in failed: ") + error);
+                    });
+                } catch (Throwable t) {
+                    runOnUiThread(() -> {
+                        button.setEnabled(true);
+                        Nx.toast(Nx.t("Bağlantı hatası: ", "Connection error: ") + t.getMessage());
+                    });
+                }
+            }).start();
+        });
+        list.addView(button);
     }
 
     /** Test panel: token state, recent player errors and a microG service check. */

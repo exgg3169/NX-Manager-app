@@ -84,6 +84,12 @@ public final class StreamSpoof {
         }
     }
 
+    static void clearCache() {
+        synchronized (cache) {
+            cache.clear();
+        }
+    }
+
     private static Entry cached(String videoId) {
         synchronized (cache) {
             Entry e = cache.get(videoId);
@@ -110,11 +116,24 @@ public final class StreamSpoof {
         byte[] streamingData = null;
         String problem = null;
         int status = playabilityStatus(response);
-        if (status != 0) {
+        if (status == 3) {
+            problem = VrLogin.signedIn()
+                    ? Nx.t("YouTube giriş istedi (oturum geçersiz olabilir)", "YouTube asked to sign in (sign-in may be invalid)")
+                    : Nx.t("YouTube giriş istiyor: NX Ayarları → Akış düzeltmesi için oturum aç", "YouTube asks to sign in: NX settings → sign in for the playback fix");
+        } else if (status != 0) {
             problem = "VR status " + status;
         } else {
             streamingData = field(response, 4);
-            if (streamingData == null) problem = Nx.t("VR yanıtında akış yok", "no streams in VR response");
+            if (streamingData == null) {
+                problem = Nx.t("VR yanıtında akış yok", "no streams in VR response");
+            } else {
+                // With plain URLs present, drop the SABR URL so the player cannot fall back to the
+                // attested session the server rejects.
+                byte[] format = field(streamingData, ADAPTIVE_FORMATS);
+                if (format != null && field(format, FORMAT_URL) != null) {
+                    streamingData = withoutField(streamingData, SABR_URL);
+                }
+            }
         }
         if (problem != null) Diagnostics.onSpoof(videoId, false, problem);
         Entry entry = new Entry(streamingData);
@@ -141,6 +160,8 @@ public final class StreamSpoof {
             c.setRequestProperty("User-Agent", USER_AGENT);
             c.setRequestProperty("X-YouTube-Client-Name", String.valueOf(CLIENT_ID));
             c.setRequestProperty("X-YouTube-Client-Version", CLIENT_VERSION);
+            String authorization = VrLogin.authorization();
+            if (authorization != null) c.setRequestProperty("Authorization", authorization);
             try (OutputStream out = c.getOutputStream()) {
                 out.write(body.getBytes(StandardCharsets.UTF_8));
             }
@@ -181,6 +202,29 @@ public final class StreamSpoof {
     }
 
     // region Protobuf reading
+
+    // StreamingData fields.
+    private static final int ADAPTIVE_FORMATS = 3, SABR_URL = 15;
+    // FormatStream field.
+    private static final int FORMAT_URL = 2;
+
+    /** A copy of [message] without field [number]. */
+    private static byte[] withoutField(byte[] message, int number) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(message.length);
+        int[] pos = {0};
+        while (pos[0] < message.length) {
+            int start = pos[0];
+            long key = varint(message, pos);
+            int type = (int) (key & 7);
+            if (type == 2) {
+                pos[0] += (int) varint(message, pos);
+            } else if (!skip(message, pos, type)) {
+                return message; // unknown wire type: leave the message as it is
+            }
+            if ((key >>> 3) != number) out.write(message, start, pos[0] - start);
+        }
+        return out.toByteArray();
+    }
 
     /** Status of the playability status message (field 2); 0 is OK. */
     private static int playabilityStatus(byte[] response) {

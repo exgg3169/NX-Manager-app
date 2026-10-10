@@ -122,18 +122,6 @@ public final class Video {
         return (speed == (int) speed ? String.valueOf((int) speed) : String.valueOf(speed)) + "x";
     }
 
-    /**
-     * Injection point: the maximum of the speed panel, in percent. Preset speeds above it are
-     * shown as Premium-only, so it is raised to the player's own limit of 4x.
-     */
-    public static int maxSpeedPercent(int max) {
-        try {
-            if (Features.has(Features.SPEED_MENU) && Nx.bool(NxSettings.SPEED_MENU)) return Math.max(max, 400);
-        } catch (Throwable t) {
-            Nx.log("Speed limit failed", t);
-        }
-        return max;
-    }
 
     private static void applyDefaultSpeed() {
         final float speed = parseSpeed(Nx.str(NxSettings.SPEED));
@@ -153,8 +141,27 @@ public final class Video {
         }, 2000);
     }
 
+    private static volatile float currentSpeed = 1.0f;
+
+    static float currentSpeed() {
+        return currentSpeed;
+    }
+
+    /** A speed the user picked in NX's speed panel; remembered like a choice in YouTube's menu. */
+    static void setSpeedByUser(float speed) {
+        try {
+            Object p = player.get();
+            if (p != null && speedMethod != null) speedMethod.invoke(p, speed);
+        } catch (Throwable t) {
+            Nx.log("Speed failed", t);
+        }
+        currentSpeed = speed;
+        if (Features.has(Features.QUALITY) && Nx.bool(NxSettings.REMEMBER_SPEED)) Nx.put(NxSettings.SPEED, String.valueOf(speed));
+    }
+
     /** Injection point: the player speed changes, by the user or by the app. */
     public static void onSpeedSet(float speed) {
+        if (speed > 0f) currentSpeed = speed;
         if (settingSpeed || !Features.has(Features.QUALITY) || !Nx.bool(NxSettings.REMEMBER_SPEED)) return;
         // Changes right after a video starts come from the app, not the user.
         if (SystemClock.elapsedRealtime() - newVideoAt < 2500) return;
