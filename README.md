@@ -9,6 +9,12 @@ Morphe/ReVanced'ın **fikri** incelenerek sıfırdan yazıldı; onların kodu ku
 |---|---|
 | **GmsCore (microG) desteği** | Paket adını `app.nx.android.youtube` yapar (orijinal YouTube ile yan yana durur), Google Play Hizmetleri yerine microG'yi kullanır, microG yoksa uyarı gösterir. |
 | **Arka planda oynatma** | Uygulamadan çıkınca / ekran kapanınca video çalmaya devam eder; Shorts ve çocuk videoları dahil. YouTube ayarlarındaki "Arka planda oynatma" seçeneği de açılır. |
+| **NX ayarları** | YouTube Ayarlar'ın en üstüne "NX Ayarları" ekler; özellikler buradan açılıp kapatılır. |
+| **Uygulama adı** | Ana ekranda "NX YouTube" (değiştirilebilir) adıyla görünür. |
+| **Akış reklamlarını gizle** | Ana sayfa / arama / izleme sayfasındaki reklam kartları, Premium tanıtımları, alışveriş rafları. |
+| **Shorts'u gizle** | Alt menüdeki Shorts düğmesi ve akıştaki Shorts rafları. |
+| **Varsayılan kalite ve hız** | Wi-Fi ve mobil veri için ayrı kalite; varsayılan hız ve seçilen hızı hatırlama. |
+| **SponsorBlock** | Topluluğun işaretlediği sponsor vb. bölümleri atlar (kategoriler NX Ayarları'nda). |
 | **Video reklamlarını engelle** | Sunucuya istemciyi "Android Automotive" olarak tanıtır (reklam gelmez) ve oynatıcının reklam yükleme / reklam katmanı metotlarını devre dışı bırakır. |
 
 Denenen YouTube sürümü: **21.16.256** (APKMirror'daki "APK", `nodpi`, bundle olmayan sürüm).
@@ -41,6 +47,12 @@ APK ──► AndroidManifest.xml (ARSCLib)  ─┐
 - **Arka planda oynatma:** Oynatıcının "arka planda devam edebilir mi?" kontrolleri (normal video,
   Shorts, çocuk videosu, ayar ekranı) her zaman "evet" döner; ilgili sunucu bayrakları (feature flag)
   sabitlenir. Bu metotlarda metin olmadığı için komut dizisi, sayısal sabit ve kaynak kimliği ile bulunur.
+- **Bileşen filtresi (Litho):** YouTube sunucudan gelen her arayüz öğesini tek bir metotta bileşene çevirir;
+  bu metodun başında `nx.ext.Litho.isFiltered(kimlik, yol)` sorulur, "evet" ise boş bileşen döndürülür.
+- **Video bilgisi:** Oynatıcı sınıfına sabit isimli köprü metotlar (`nxTime`, `nxSeek`, `nxSetSpeed`) eklenir;
+  video kimliği oynatıcı yanıtından yakalanır. SponsorBlock ve kalite/hız bunları kullanır.
+- **Özellik işaretleri:** Uygulanan patch'ler manifest'teki `nx.features` meta-data'sına yazılır; eklenti yalnızca
+  bunları çalıştırır ve NX Ayarları'nda yalnızca bunları gösterir.
 - **Eklenti (extension):** `extension/` altındaki Java kodu derlenip DEX olarak APK'ya eklenir
   (ör. microG kurulu mu kontrolü).
 

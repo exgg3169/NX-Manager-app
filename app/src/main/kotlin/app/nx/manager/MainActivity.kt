@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import nx.patches.youtube.AppNamePatch
 import nx.patches.youtube.GmsCorePatch
 import nx.patches.youtube.YouTube
 
@@ -136,6 +137,16 @@ private fun Screen() {
                         Text(patch.description, style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+            if (AppNamePatch.id in state.selected) {
+                OutlinedTextField(
+                    value = state.appName,
+                    onValueChange = PatchSession::setAppName,
+                    label = { Text("Uygulama adı") },
+                    singleLine = true,
+                    enabled = !state.running,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             if (GmsCorePatch.id in state.selected) {
                 OutlinedTextField(

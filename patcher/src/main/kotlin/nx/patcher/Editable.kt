@@ -34,6 +34,15 @@ class EditableClass(private val base: ClassDef) : BaseTypeReference(), ClassDef 
 
     val methodList: List<EditableMethod> get() = directs + virtuals
 
+    /** Adds a new method (e.g. a bridge with a fixed name for our extension code). */
+    fun addMethod(method: Method): EditableMethod {
+        val editable = EditableMethod(method)
+        val direct = com.android.tools.smali.dexlib2.AccessFlags.STATIC.isSet(method.accessFlags) ||
+            com.android.tools.smali.dexlib2.AccessFlags.PRIVATE.isSet(method.accessFlags) || method.name == "<init>"
+        if (direct) directs += editable else virtuals += editable
+        return editable
+    }
+
     /** Finds the editable counterpart of [method], which may come from the original class. */
     fun methodLike(method: Method): EditableMethod = methodList.first {
         it.name == method.name && it.returnType == method.returnType &&

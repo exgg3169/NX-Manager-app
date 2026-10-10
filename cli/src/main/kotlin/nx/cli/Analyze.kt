@@ -47,6 +47,14 @@ object Analyze {
         }
     }
 
+    /** Prints methods with the given name and parameter shape, e.g. `onItemClick LLIJ` (L = any object). */
+    fun signature(apk: File, name: String, params: String) {
+        for (c in classes(apk)) for (m in c.methods) {
+            val p = m.parameterTypes.joinToString("") { if (it.startsWith("L")) "L" else it.toString() }
+            if (m.name == name && p == params) println("${c.type}->${m.name}(${m.parameterTypes.joinToString("")})${m.returnType}")
+        }
+    }
+
     /** Disassembles a whole class to smali. */
     fun dump(apk: File, type: String) {
         val c = classes(apk).firstOrNull { it.type == type } ?: error("class not found: $type")

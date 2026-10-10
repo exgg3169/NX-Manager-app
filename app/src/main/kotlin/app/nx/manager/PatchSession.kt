@@ -25,6 +25,7 @@ data class UiState(
     val apkProblem: String? = null,
     val selected: Set<String> = YouTube.patches.filter { it.enabledByDefault }.map { it.id }.toSet(),
     val packageName: String = PatchOptions().packageName,
+    val appName: String = PatchOptions().appName,
     val running: Boolean = false,
     val log: List<String> = emptyList(),
     val result: File? = null,
@@ -44,7 +45,7 @@ object PatchSession {
     private fun outputFile(context: Context) = File(context.filesDir, "patched/youtube-nx.apk")
 
     fun selectApk(context: Context, uri: Uri) {
-        _state.update { UiState(loading = true, selected = it.selected, packageName = it.packageName) }
+        _state.update { UiState(loading = true, selected = it.selected, packageName = it.packageName, appName = it.appName) }
         scope.launch {
             try {
                 val file = inputFile(context)
@@ -71,6 +72,8 @@ object PatchSession {
 
     fun setPackageName(name: String) = _state.update { it.copy(packageName = name.trim()) }
 
+    fun setAppName(name: String) = _state.update { it.copy(appName = name) }
+
     fun start(context: Context) {
         val current = _state.value
         if (current.running || current.apk == null) return
@@ -85,7 +88,7 @@ object PatchSession {
                     input = inputFile(appContext),
                     output = output,
                     patches = chosen,
-                    options = PatchOptions(packageName = current.packageName),
+                    options = PatchOptions(packageName = current.packageName, appName = current.appName.trim().ifEmpty { "NX YouTube" }),
                     key = SigningKey.loadOrCreate(File(appContext.filesDir, "keys")),
                     workDir = File(appContext.cacheDir, "work"),
                     log = ::log,

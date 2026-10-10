@@ -137,3 +137,23 @@ fun MutableMethodImplementation.overrideLiteralResult(literal: Long, value: Bool
     }
     return changed
 }
+
+/**
+ * Inserts [newInstructions] before the instruction at [index] so that they also run when the
+ * code jumps to that instruction: branch targets and handler labels move to the new code.
+ */
+fun MutableMethodImplementation.insertAtTarget(index: Int, newInstructions: List<BuilderInstruction>) {
+    val target = instructions[index].location
+    val labels = target.labels.toList()
+    newInstructions.asReversed().forEach { addInstruction(index, it) }
+    if (labels.isEmpty()) return
+    val first = instructions[index].location
+    target.labels.removeAll(labels.toSet())
+    first.labels.addAll(labels)
+}
+
+/** Indexes of every `return*` instruction. */
+fun MutableMethodImplementation.returnIndexes(): List<Int> =
+    instructions.indices.filter {
+        instructions[it].opcode in setOf(Opcode.RETURN, Opcode.RETURN_OBJECT, Opcode.RETURN_VOID, Opcode.RETURN_WIDE)
+    }

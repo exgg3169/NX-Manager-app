@@ -57,8 +57,9 @@ class MethodFilter(
             wanted.indices.all { i -> wanted[i] == null || wanted[i] == actual[start + i] }
         }
 
+    // "L" and "[L" stand for any object type and any object array type.
     private fun typeMatches(want: String, have: String) =
-        if (want == "L") have.startsWith("L") else want == have
+        if (want.endsWith("L") && want.trimStart('[') == "L") have.startsWith(want) else want == have
 }
 
 fun DexStore.find(filter: MethodFilter): List<MethodHit> {

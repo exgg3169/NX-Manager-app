@@ -55,6 +55,7 @@ object Patcher {
         log: (String) -> Unit,
     ) {
         workDir.mkdirs()
+        val patches = withDependencies(patches)
         val unsigned = File(workDir, "unsigned.apk")
         try {
             // Everything that changes, built first so the parsed dex files can be freed before writing.
@@ -70,6 +71,18 @@ object Patcher {
         } finally {
             workDir.deleteRecursively()
         }
+    }
+
+    /** Adds missing dependencies, each placed before the first patch that needs it. */
+    fun withDependencies(selected: List<Patch>): List<Patch> {
+        val result = ArrayList<Patch>()
+        fun add(patch: Patch) {
+            if (patch in result) return
+            patch.dependencies.forEach(::add)
+            result += patch
+        }
+        selected.forEach(::add)
+        return result
     }
 
     private fun buildChanges(
@@ -89,14 +102,18 @@ object Patcher {
                     log("Uyarı: \"${patch.title}\" bu sürümde denenmedi (denenen: ${patch.testedVersions.joinToString()})")
                 }
             }
-            val resourceIds = resolveResources(zip, manifest.packageName, patches.flatMap { it.resources }.toSet())
+            val (resourceIds, xmlPaths) = resolveResources(
+                zip, manifest.packageName,
+                patches.flatMap { it.resources }.toSet(), patches.flatMap { it.xmlResources }.toSet(),
+            )
+            val xmlFiles = xmlPaths.mapValues { (_, path) -> path to zip.read(path) }
             val dexEntries = zip.entries().asSequence()
                 .mapNotNull { e -> dexName.matchEntire(e.name)?.let { e.name to (it.groupValues[1].toIntOrNull() ?: 1) } }
                 .sortedBy { it.second }
                 .map { (name, _) -> name to zip.read(name) }
                 .toList()
             log("${dexEntries.size} dex dosyası okunuyor…")
-            PatchContext(DexStore(dexEntries), manifest, options, resourceIds, log)
+            PatchContext(DexStore(dexEntries), manifest, options, resourceIds, xmlFiles, log)
         }
 
         log("Kod taranıyor…")
@@ -110,21 +127,32 @@ object Patcher {
         log("Değişen dex dosyaları yazılıyor…")
         val changes = LinkedHashMap<String, ByteArray>()
         changes["AndroidManifest.xml"] = ctx.manifest.toBytes()
+        changes += ctx.xmlChanges()
         changes += ctx.dex.writeModified { log("  $it") }
         var nextIndex = ctx.dex.dexes.size + 1
         ctx.extraDex.forEach { changes["classes${nextIndex++}.dex"] = it }
         return changes
     }
 
-    /** Looks up resource ids by `type/name`. The large resource table is dropped right after. */
-    private fun resolveResources(zip: ZipFile, packageName: String, names: Set<String>): Map<String, Int> {
-        if (names.isEmpty()) return emptyMap()
+    /**
+     * Looks up resource ids and XML file paths by `type/name`. The large resource table is
+     * dropped right after.
+     */
+    private fun resolveResources(
+        zip: ZipFile,
+        packageName: String,
+        ids: Set<String>,
+        files: Set<String>,
+    ): Pair<Map<String, Int>, Map<String, String>> {
+        if (ids.isEmpty() && files.isEmpty()) return emptyMap<String, Int>() to emptyMap()
         val table = zip.getInputStream(zip.getEntry("resources.arsc") ?: throw PatchException("resources.arsc not found"))
             .use { TableBlock.load(it) }
-        return names.mapNotNull { name ->
-            table.getResource(packageName, name.substringBefore('/'), name.substringAfter('/'))
-                ?.let { name to it.resourceId }
+        fun entry(name: String) = table.getResource(packageName, name.substringBefore('/'), name.substringAfter('/'))
+        val idMap = ids.mapNotNull { name -> entry(name)?.let { name to it.resourceId } }.toMap()
+        val fileMap = files.mapNotNull { name ->
+            entry(name)?.stringValues?.asSequence()?.firstOrNull { it.startsWith("res/") }?.let { name to it }
         }.toMap()
+        return idMap to fileMap
     }
 
     private fun isOldSignature(name: String): Boolean {

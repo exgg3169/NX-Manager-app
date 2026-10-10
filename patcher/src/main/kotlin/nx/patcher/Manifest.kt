@@ -80,6 +80,34 @@ class Manifest(bytes: ByteArray) {
         setStringAttr(element, VALUE, value)
     }
 
+    /** Records an enabled NX feature in the meta-data "nx.features", read by the extension. */
+    fun addFeature(feature: String) {
+        val existing = application.elements.asSequence()
+            .firstOrNull { it.name == "meta-data" && stringAttr(it, NAME) == "nx.features" }
+            ?.let { stringAttr(it, VALUE) }
+            ?.split(',')?.filter { it.isNotEmpty() }.orEmpty()
+        if (feature !in existing) addMetaData("nx.features", (existing + feature).joinToString(","))
+    }
+
+    /** Declares an activity implemented by our extension code. */
+    fun addActivity(className: String) {
+        if (elements().any { it.name == "activity" && stringAttr(it, NAME) == className }) return
+        val activity = application.newElement("activity")
+        setStringAttr(activity, NAME, className)
+        activity.getOrCreateAndroidAttribute("exported", EXPORTED).setValueAsBoolean(false)
+    }
+
+    /** Sets the label of the application and of every launcher entry. */
+    fun setLauncherLabel(label: String) {
+        setStringAttr(application, LABEL, label)
+        for (element in elements().filter { it.name == "activity" || it.name == "activity-alias" }) {
+            val isLauncher = element.recursiveElements().asSequence().any {
+                it.name == "category" && stringAttr(it, NAME) == "android.intent.category.LAUNCHER"
+            }
+            if (isLauncher) setStringAttr(element, LABEL, label)
+        }
+    }
+
     /** Makes another app visible to this one on Android 11+ (package visibility). */
     fun addQueriedPackage(name: String) {
         val queries = block.manifestElement.getOrCreateElement("queries")
@@ -104,7 +132,9 @@ class Manifest(bytes: ByteArray) {
     }
 
     companion object {
+        const val LABEL = 0x01010001
         const val NAME = 0x01010003
+        const val EXPORTED = 0x01010010
         const val PERMISSION = 0x01010006
         const val AUTHORITIES = 0x01010018
         const val VALUE = 0x01010024
@@ -114,7 +144,7 @@ class Manifest(bytes: ByteArray) {
         const val IS_SPLIT_REQUIRED = 0x01010591
 
         private val attrNames = mapOf(
-            NAME to "name", PERMISSION to "permission", AUTHORITIES to "authorities", VALUE to "value",
+            LABEL to "label", NAME to "name", PERMISSION to "permission", AUTHORITIES to "authorities", VALUE to "value",
             TARGET_ACTIVITY to "targetActivity", BACKUP_AGENT to "backupAgent",
             PARENT_ACTIVITY_NAME to "parentActivityName",
         )
