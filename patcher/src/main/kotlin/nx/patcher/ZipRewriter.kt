@@ -8,10 +8,10 @@ import java.io.OutputStream
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.channels.Channels
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
+import java.util.zip.ZipFile
 
 /**
  * Copies a ZIP file while replacing, adding and removing entries. Untouched entries are copied
@@ -34,31 +34,47 @@ object ZipRewriter {
         val localOffset: Long,
     )
 
-    fun rewrite(input: File, output: File, replace: Map<String, ByteArray>, remove: (String) -> Boolean) {
+    /** Returns how many entries had to be re-encoded instead of copied raw. */
+    fun rewrite(input: File, output: File, replace: Map<String, ByteArray>, remove: (String) -> Boolean): Int {
+        var reencoded = 0
         RandomAccessFile(input, "r").use { raf ->
             val entries = readCentralDirectory(raf)
+            // Opened only if some entry's local header cannot be located.
+            val fallback = lazy { ZipFile(input) }
             CountingStream(BufferedOutputStream(FileOutputStream(output), 1 shl 16)).use { out ->
                 val written = ArrayList<Pair<CdEntry, Long>>()
-                val channel = raf.channel
-                val outChannel = Channels.newChannel(out)
+                val buffer = ByteArray(1 shl 16)
                 for (entry in entries) {
                     if (entry.name in replace || remove(entry.name)) continue
-                    val header = ByteBuffer.allocate(30).order(ByteOrder.LITTLE_ENDIAN)
-                    channel.read(header, entry.localOffset)
-                    if (header.getInt(0) != 0x04034b50) throw PatchException("Bad ZIP entry ${entry.name}")
-                    val dataStart = entry.localOffset + 30 + header.getShort(26).toUShort().toInt() +
-                        header.getShort(28).toUShort().toInt()
                     val offset = out.count
-                    writeLocalHeader(out, entry)
-                    var position = dataStart
-                    var remaining = entry.compressedSize
-                    while (remaining > 0) {
-                        val n = channel.transferTo(position, remaining, outChannel)
-                        if (n <= 0) throw PatchException("Unexpected end of ZIP data in ${entry.name}")
-                        position += n
-                        remaining -= n
+                    val dataStart = localDataStart(raf, entry)
+                    if (dataStart != null) {
+                        writeLocalHeader(out, entry)
+                        raf.seek(dataStart)
+                        var remaining = entry.compressedSize
+                        while (remaining > 0) {
+                            val n = raf.read(buffer, 0, minOf(remaining, buffer.size.toLong()).toInt())
+                            if (n <= 0) throw PatchException("Unexpected end of ZIP data in ${entry.name}")
+                            out.write(buffer, 0, n)
+                            remaining -= n
+                        }
+                        written += entry to offset
+                    } else {
+                        // The raw data cannot be found; read it through the standard ZIP reader and store it uncompressed.
+                        val zipEntry = fallback.value.getEntry(entry.name)
+                            ?: throw PatchException("Bad ZIP entry ${entry.name}")
+                        val stored = CdEntry(
+                            entry.name, entry.versionMadeBy, versionNeeded = 10, flags = entry.flags and 0x800,
+                            method = 0, time = entry.time, date = entry.date, crc = entry.crc,
+                            compressedSize = entry.size, size = entry.size,
+                            externalAttributes = entry.externalAttributes, localOffset = 0,
+                        )
+                        writeLocalHeader(out, stored)
+                        val copied = fallback.value.getInputStream(zipEntry).use { it.copyTo(out, buffer.size) }
+                        if (copied != entry.size) throw PatchException("Size mismatch in ${entry.name}")
+                        written += stored to offset
+                        reencoded++
                     }
-                    written += entry to offset
                 }
                 for ((name, bytes) in replace) {
                     val crc = CRC32().apply { update(bytes) }.value
@@ -84,7 +100,21 @@ object ZipRewriter {
                     .putInt(cdSize.toInt()).putInt(cdStart.toInt()).putShort(0)
                 out.write(eocd.array())
             }
+            if (fallback.isInitialized()) fallback.value.close()
         }
+        return reencoded
+    }
+
+    /** Where the entry's data begins, or null if its local header is not where the directory says. */
+    private fun localDataStart(raf: RandomAccessFile, entry: CdEntry): Long? {
+        if (entry.localOffset + 30 > raf.length()) return null
+        val header = ByteArray(30)
+        raf.seek(entry.localOffset)
+        raf.readFully(header)
+        val b = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)
+        if (b.getInt(0) != 0x04034b50) return null
+        val start = entry.localOffset + 30 + b.getShort(26).toUShort().toInt() + b.getShort(28).toUShort().toInt()
+        return start.takeIf { it + entry.compressedSize <= raf.length() }
     }
 
     private fun readCentralDirectory(raf: RandomAccessFile): List<CdEntry> {
@@ -98,8 +128,11 @@ object ZipRewriter {
         val count = buf.getShort(eocd + 10).toUShort().toInt()
         val cdSize = buf.getInt(eocd + 12).toUInt().toLong()
         val cdOffset = buf.getInt(eocd + 16).toUInt().toLong()
+        // Like java.util.zip, tolerate bytes before the archive: offsets are then shifted by that amount.
+        val eocdPosition = raf.length() - tailSize + eocd
+        val shift = eocdPosition - cdSize - cdOffset
         val cd = ByteArray(cdSize.toInt())
-        raf.seek(cdOffset)
+        raf.seek(cdOffset + shift)
         raf.readFully(cd)
         val b = ByteBuffer.wrap(cd).order(ByteOrder.LITTLE_ENDIAN)
         var p = 0
@@ -120,7 +153,7 @@ object ZipRewriter {
                 compressedSize = b.getInt(p + 20).toUInt().toLong(),
                 size = b.getInt(p + 24).toUInt().toLong(),
                 externalAttributes = b.getInt(p + 38).toUInt().toLong(),
-                localOffset = b.getInt(p + 42).toUInt().toLong(),
+                localOffset = b.getInt(p + 42).toUInt().toLong() + shift,
             ).also { p += 46 + nameLength + extraLength + commentLength }
         }
     }

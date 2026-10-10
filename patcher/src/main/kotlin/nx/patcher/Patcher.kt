@@ -34,7 +34,8 @@ object Patcher {
             val changes = buildChanges(input, patches, options, log)
 
             log("APK paketleniyor…")
-            ZipRewriter.rewrite(input, unsigned, changes, ::isOldSignature)
+            val reencoded = ZipRewriter.rewrite(input, unsigned, changes, ::isOldSignature)
+            if (reencoded > 0) log("  $reencoded dosya ham kopyalanamadı, yeniden yazıldı")
 
             log("İmzalanıyor…")
             signApk(unsigned, output, key)
