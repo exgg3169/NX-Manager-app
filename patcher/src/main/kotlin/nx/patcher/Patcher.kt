@@ -1,6 +1,7 @@
 package nx.patcher
 
 import com.android.apksig.ApkVerifier
+import com.reandroid.arsc.chunk.TableBlock
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipFile
@@ -88,13 +89,14 @@ object Patcher {
                     log("Uyarı: \"${patch.title}\" bu sürümde denenmedi (denenen: ${patch.testedVersions.joinToString()})")
                 }
             }
+            val resourceIds = resolveResources(zip, manifest.packageName, patches.flatMap { it.resources }.toSet())
             val dexEntries = zip.entries().asSequence()
                 .mapNotNull { e -> dexName.matchEntire(e.name)?.let { e.name to (it.groupValues[1].toIntOrNull() ?: 1) } }
                 .sortedBy { it.second }
                 .map { (name, _) -> name to zip.read(name) }
                 .toList()
             log("${dexEntries.size} dex dosyası okunuyor…")
-            PatchContext(DexStore(dexEntries), manifest, options, log)
+            PatchContext(DexStore(dexEntries), manifest, options, resourceIds, log)
         }
 
         log("Kod taranıyor…")
@@ -112,6 +114,17 @@ object Patcher {
         var nextIndex = ctx.dex.dexes.size + 1
         ctx.extraDex.forEach { changes["classes${nextIndex++}.dex"] = it }
         return changes
+    }
+
+    /** Looks up resource ids by `type/name`. The large resource table is dropped right after. */
+    private fun resolveResources(zip: ZipFile, packageName: String, names: Set<String>): Map<String, Int> {
+        if (names.isEmpty()) return emptyMap()
+        val table = zip.getInputStream(zip.getEntry("resources.arsc") ?: throw PatchException("resources.arsc not found"))
+            .use { TableBlock.load(it) }
+        return names.mapNotNull { name ->
+            table.getResource(packageName, name.substringBefore('/'), name.substringAfter('/'))
+                ?.let { name to it.resourceId }
+        }.toMap()
     }
 
     private fun isOldSignature(name: String): Boolean {

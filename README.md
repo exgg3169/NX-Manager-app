@@ -8,6 +8,7 @@ Morphe/ReVanced'ın **fikri** incelenerek sıfırdan yazıldı; onların kodu ku
 | Patch | Ne yapar |
 |---|---|
 | **GmsCore (microG) desteği** | Paket adını `app.nx.android.youtube` yapar (orijinal YouTube ile yan yana durur), Google Play Hizmetleri yerine microG'yi kullanır, microG yoksa uyarı gösterir. |
+| **Arka planda oynatma** | Uygulamadan çıkınca / ekran kapanınca video çalmaya devam eder; Shorts ve çocuk videoları dahil. YouTube ayarlarındaki "Arka planda oynatma" seçeneği de açılır. |
 | **Video reklamlarını engelle** | Sunucuya istemciyi "Android Automotive" olarak tanıtır (reklam gelmez) ve oynatıcının reklam yükleme / reklam katmanı metotlarını devre dışı bırakır. |
 
 Denenen YouTube sürümü: **21.16.256** (APKMirror'daki "APK", `nodpi`, bundle olmayan sürüm).
@@ -37,6 +38,9 @@ APK ──► AndroidManifest.xml (ARSCLib)  ─┐
     `SPOOFED_PACKAGE_NAME` ve `SPOOFED_PACKAGE_SIGNATURE`.
   - Koddaki aynı metinler değiştirilir. Play Hizmetleri imza kontrolü, Cast ve cihaz uyumluluk
     kontrolü devre dışı bırakılır; bildirim kaydı orijinal paket adını gönderir.
+- **Arka planda oynatma:** Oynatıcının "arka planda devam edebilir mi?" kontrolleri (normal video,
+  Shorts, çocuk videosu, ayar ekranı) her zaman "evet" döner; ilgili sunucu bayrakları (feature flag)
+  sabitlenir. Bu metotlarda metin olmadığı için komut dizisi, sayısal sabit ve kaynak kimliği ile bulunur.
 - **Eklenti (extension):** `extension/` altındaki Java kodu derlenip DEX olarak APK'ya eklenir
   (ör. microG kurulu mu kontrolü).
 

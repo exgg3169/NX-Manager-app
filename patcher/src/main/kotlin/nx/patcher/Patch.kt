@@ -10,8 +10,13 @@ class PatchContext(
     val dex: DexStore,
     val manifest: Manifest,
     val options: PatchOptions,
+    private val resourceIds: Map<String, Int>,
     private val logger: (String) -> Unit,
 ) {
+    /** Id of a resource declared in [Patch.resources], e.g. `resourceId("string/app_name")`. */
+    fun resourceId(name: String): Long =
+        resourceIds[name]?.toLong() ?: throw PatchException("Resource $name not found in the APK")
+
     /** Extra dex files (our own Java code) appended to the APK. */
     val extraDex = mutableListOf<ByteArray>()
 
@@ -36,6 +41,9 @@ interface Patch {
 
     /** App versions the patch was verified on (others may still work). */
     val testedVersions: Set<String>
+
+    /** Resources the patch looks up by name (`type/name`), resolved before the code is loaded. */
+    val resources: List<String> get() = emptyList()
 
     /** Method filters used by the patch, indexed together up front for speed. */
     val filters: List<MethodFilter> get() = emptyList()

@@ -120,3 +120,20 @@ val Instruction.stringValue: String?
 
 val Instruction.methodRef: MethodReference?
     get() = (this as? ReferenceInstruction)?.reference as? MethodReference
+
+/**
+ * Makes the value read right after the constant [literal] (typically a feature flag lookup such as
+ * `flags.getBoolean(45415425L)`) always [value], by replacing the `move-result` that receives it.
+ * Returns how many places were changed.
+ */
+fun MutableMethodImplementation.overrideLiteralResult(literal: Long, value: Boolean, within: Int = 6): Int {
+    var changed = 0
+    val all = instructions
+    for (i in all.indices) {
+        if ((all[i] as? com.android.tools.smali.dexlib2.iface.instruction.WideLiteralInstruction)?.wideLiteral != literal) continue
+        val result = (i + 1..minOf(i + within, all.lastIndex)).firstOrNull { all[it].opcode == Opcode.MOVE_RESULT } ?: continue
+        replaceWithConst4(result, if (value) 1 else 0)
+        changed++
+    }
+    return changed
+}

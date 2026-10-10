@@ -37,6 +37,16 @@ object Analyze {
         }
     }
 
+    /** Prints every method that loads the numeric constant [value]. */
+    fun literal(apk: File, value: Long) {
+        for (c in classes(apk)) for (m in c.methods) {
+            val impl = m.implementation ?: continue
+            if (impl.instructions.any { (it as? com.android.tools.smali.dexlib2.iface.instruction.WideLiteralInstruction)?.wideLiteral == value }) {
+                println("${c.type}->${m.name}(${m.parameterTypes.joinToString("")})${m.returnType}")
+            }
+        }
+    }
+
     /** Disassembles a whole class to smali. */
     fun dump(apk: File, type: String) {
         val c = classes(apk).firstOrNull { it.type == type } ?: error("class not found: $type")
