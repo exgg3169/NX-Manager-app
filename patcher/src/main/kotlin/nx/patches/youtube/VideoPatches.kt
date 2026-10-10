@@ -297,6 +297,41 @@ object DiagnosticsPatch : Patch {
         errorInit.code.let { c ->
             c.insertAt(0, listOf(invokeStaticRange(c.parameterRegister(errorInit, 1), "$DIAG->onPlayerError(Ljava/lang/String;)V")))
         }
-        ctx.log("  Jeton: ${read.name}(), oynatıcı hataları: $errorClass")
+        // The token store behind the manager: hook every implementation's lookups and failures.
+        val storeCall = read.code.instructions.firstNotNullOfOrNull { ins ->
+            ins.methodRef?.takeIf { ins.opcode == Opcode.INVOKE_INTERFACE && it.returnType.startsWith("L") }
+        } ?: throw PatchException("PoToken store not found")
+        val storeInterface = storeCall.definingClass
+        val tokenType = storeCall.returnType
+        val stores = ctx.dex.dexes.flatMap { it.classes }.filter { storeInterface in it.interfaces }.map { it.type }
+        var hooks = 0
+        for (type in stores) {
+            for (m in ctx.dex.edit(type).methodList) {
+                if (m.implementation == null) continue
+                val returnsToken = m.returnType == tokenType && m.name != "<init>"
+                val returnsError = m.returnType == "Ljava/lang/Throwable;"
+                val c = m.code
+                if (returnsToken || returnsError) {
+                    val hook = if (returnsToken) "$DIAG->onTokenLookup(Ljava/lang/Object;)V" else "$DIAG->onTokenError(Ljava/lang/Throwable;)V"
+                    for (index in c.returnIndexes().asReversed()) {
+                        val register = (c.instructions[index] as OneRegisterInstruction).registerA
+                        c.insertAtTarget(index, listOf(invokeStaticRange(register, hook)))
+                        hooks++
+                    }
+                }
+                // Failures stored in a field.
+                val stores = c.instructions.indices.filter {
+                    val ins = c.instructions[it]
+                    ins.opcode == Opcode.IPUT_OBJECT &&
+                        ((ins as ReferenceInstruction).reference as FieldReference).type == "Ljava/lang/Throwable;"
+                }
+                for (index in stores.asReversed()) {
+                    val register = (c.instructions[index] as TwoRegisterInstruction).registerA
+                    c.insertAtTarget(index, listOf(invokeStaticRange(register, "$DIAG->onTokenError(Ljava/lang/Throwable;)V")))
+                    hooks++
+                }
+            }
+        }
+        ctx.log("  Jeton: ${read.name}(), depo: ${stores.joinToString()} ($hooks kanca), oynatıcı hataları: $errorClass")
     }
 }

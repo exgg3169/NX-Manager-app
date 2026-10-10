@@ -55,6 +55,11 @@ object Analyze {
         }
     }
 
+    /** Prints classes implementing an interface or extending a class. */
+    fun implementers(apk: File, type: String) {
+        for (c in classes(apk)) if (type in c.interfaces || c.superclass == type) println(c.type)
+    }
+
     /** Disassembles a whole class to smali. */
     fun dump(apk: File, type: String) {
         val c = classes(apk).firstOrNull { it.type == type } ?: error("class not found: $type")

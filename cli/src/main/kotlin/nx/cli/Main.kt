@@ -22,6 +22,7 @@ fun main(args: Array<String>) {
         "verify" -> println(Patcher.verify(File(args[1]), YouTube.SIGNING_CERTS) ?: "OK")
         "literal" -> Analyze.literal(File(args[1]), java.lang.Long.decode(args[2]))
         "sig" -> Analyze.signature(File(args[1]), args[2], args[3])
+        "impl" -> Analyze.implementers(File(args[1]), args[2])
         "grep" -> Analyze.grep(File(args[1]), args[2])
         "dump" -> Analyze.dump(File(args[1]), args[2])
         else -> println("usage: patch <in.apk> <out.apk> [keyDir] | grep <apk> <regex> | dump <apk> <Lclass;>")

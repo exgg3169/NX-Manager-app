@@ -38,22 +38,55 @@ public final class Diagnostics {
             lastTokenAt = System.currentTimeMillis();
             lastTokenSize = size;
             tokenCount++;
-            if (size == 0) add(Nx.t("Jeton BOŞ döndü", "Token was EMPTY"));
+            if (size == 0 && tokenCount % 20 == 1) add(Nx.t("Jeton BOŞ döndü", "Token was EMPTY"));
         } catch (Throwable ignored) {
         }
+    }
+
+    /** The token store answered a lookup; [token] holds the token bytes or is null. */
+    public static void onTokenLookup(Object token) {
+        try {
+            if (token == null) {
+                onPoTokenMissing();
+                return;
+            }
+            for (java.lang.reflect.Field f : token.getClass().getDeclaredFields()) {
+                if (f.getType() == byte[].class && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                    f.setAccessible(true);
+                    onPoToken((byte[]) f.get(token));
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static String lastError;
+
+    /** Minting a token failed with [error]. */
+    public static void onTokenError(Throwable error) {
+        if (error == null) return;
+        String text = String.valueOf(error);
+        Throwable cause = error.getCause();
+        if (cause != null && cause != error) text += " ← " + cause;
+        if (text.length() > 160) text = text.substring(0, 160) + "…";
+        if (text.equals(lastError)) return;
+        lastError = text;
+        add(Nx.t("Jeton üretim hatası: ", "Token minting error: ") + text);
     }
 
     /** YouTube found no session PoToken. */
     public static void onPoTokenMissing() {
         missingCount++;
-        add(Nx.t("Jeton yok (oturum jetonu oluşturulamadı)", "No token (session token not initialized)"));
+        if (missingCount % 20 == 1) add(Nx.t("Jeton yok (oturum jetonu oluşturulamadı)", "No token (session token not initialized)"));
     }
 
     /** A player error report with its code, e.g. "potoken.nulloninit". */
     public static void onPlayerError(String code) {
         if (code == null) return;
         add(Nx.t("Oynatıcı hatası: ", "Player error: ") + code);
-        if (Nx.bool(NxSettings.DIAG_TOASTS)) {
+        // "cache" reports are routine disk cache notes, not playback failures.
+        if (!"cache".equals(code) && Nx.bool(NxSettings.DIAG_TOASTS)) {
             long now = SystemClock.elapsedRealtime();
             if (now - lastToastAt > 3000) {
                 lastToastAt = now;
@@ -74,6 +107,7 @@ public final class Diagnostics {
         events.clear();
         lastTokenAt = 0;
         lastTokenSize = -1;
+        lastError = null;
         tokenCount = 0;
         missingCount = 0;
     }
