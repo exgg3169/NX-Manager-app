@@ -40,7 +40,9 @@ class InstallReceiver : BroadcastReceiver() {
                 val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
                 context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
-            PackageInstaller.STATUS_SUCCESS -> PatchSession.setInstallStatus("Kuruldu ✓")
+            PackageInstaller.STATUS_SUCCESS -> PatchSession.setInstallStatus(
+                "Kuruldu ✓ — İlk açılıştan sonra uygulamayı bir kez yeniden başlatın; bazı özellikler (ör. hız paneli) ancak ikinci açılışta tam çalışır.",
+            )
             else -> {
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 val hint = when (status) {

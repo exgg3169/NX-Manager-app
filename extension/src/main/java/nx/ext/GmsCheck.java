@@ -60,6 +60,18 @@ public final class GmsCheck {
             return;
         }
 
+        if (firstStartAfterInstall(activity)) {
+            new AlertDialog.Builder(activity)
+                    .setTitle(turkish ? "NX YouTube hazır" : "NX YouTube is ready")
+                    .setMessage(turkish
+                            ? "YouTube ilk açılışta ayarlarını indirir ve bazı yerler (ör. hız paneli) ancak bir sonraki açılışta düzelir. Her şeyin tam çalışması için uygulamayı bir kez yeniden başlatın."
+                            : "YouTube downloads its settings on the first start, and some parts (such as the speed panel) only update on the next start. Restart the app once so everything works.")
+                    .setPositiveButton(turkish ? "Yeniden başlat" : "Restart", (dialog, which) -> restart(activity))
+                    .setNegativeButton(turkish ? "Sonra" : "Later", null)
+                    .show();
+            return;
+        }
+
         PowerManager power = (PowerManager) activity.getSystemService(Activity.POWER_SERVICE);
         if (power != null && !power.isIgnoringBatteryOptimizations(GMS_PACKAGE)) {
             new AlertDialog.Builder(activity)
@@ -73,6 +85,29 @@ public final class GmsCheck {
                     .setNegativeButton(turkish ? "Sonra" : "Later", null)
                     .show();
         }
+    }
+
+    /** True once per installation (or update) of the patched app. */
+    private static boolean firstStartAfterInstall(Activity activity) {
+        try {
+            long installed = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).lastUpdateTime;
+            android.content.SharedPreferences prefs = Nx.prefs();
+            if (prefs.getLong("restart_prompted_for", 0) == installed) return false;
+            prefs.edit().putLong("restart_prompted_for", installed).apply();
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static void restart(Activity activity) {
+        Intent intent = activity.getPackageManager().getLaunchIntentForPackage(activity.getPackageName());
+        if (intent != null) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            activity.startActivity(intent);
+        }
+        activity.finishAffinity();
+        android.os.Process.killProcess(android.os.Process.myPid());
     }
 
     private static boolean isInstalled(Activity activity) {
