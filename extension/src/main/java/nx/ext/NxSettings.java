@@ -139,6 +139,18 @@ public final class NxSettings {
 
     // endregion
 
+    // region GIF comments
+
+    static {
+        feature = "gif";
+    }
+
+    public static final Setting GIF_COMMENTS = bool("gif_comments", Nx.t("Yorumlar", "Comments"),
+            Nx.t("GIF yorumları", "GIF comments"),
+            Nx.t("Yorumdaki Tenor bağlantısı GIF olarak gönderilir", "A Tenor link in a comment is posted as a GIF"), true);
+
+    // endregion
+
     // region Return YouTube Dislike
 
     static {

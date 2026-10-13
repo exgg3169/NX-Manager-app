@@ -45,6 +45,14 @@ public final class SettingsActivity extends Activity {
         list.addView(text(Nx.t("Değişikliklerin çoğu bir sonraki videoda geçerli olur. Bazıları için uygulamayı yeniden başlatın.",
                 "Most changes apply from the next video. Some need an app restart."), 13, false));
 
+        if (Features.has(Features.GIF)) {
+            Button gif = new Button(this);
+            gif.setText(Nx.t("GIF bul (yorum için)", "Find a GIF (for comments)"));
+            gif.setOnClickListener(v -> startActivity(new Intent(this, GifActivity.class)));
+            LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            gp.topMargin = dp(16);
+            list.addView(gif, gp);
+        }
         if (Features.has(Features.SPOOF_STREAMS)) addVrLogin();
         if (Features.has(Features.DIAGNOSTICS)) addDiagnostics();
 
