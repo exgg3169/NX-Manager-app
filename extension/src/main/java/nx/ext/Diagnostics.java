@@ -125,6 +125,7 @@ public final class Diagnostics {
         lastTokenSize = -1;
         lastError = null;
         lastSpoofProblem = null;
+        CrashLog.clear();
         spoofCount = 0;
         tokenCount = 0;
         missingCount = 0;
@@ -146,6 +147,8 @@ public final class Diagnostics {
         }
         sb.append('\n').append(Nx.t("Jeton okuma: ", "Token reads: ")).append(tokenCount)
                 .append(Nx.t(", jetonsuz: ", ", missing: ")).append(missingCount);
+        String crash = CrashLog.last();
+        if (crash != null) sb.append("\n\n").append(Nx.t("Son çökme: ", "Last crash: ")).append(crash);
         sb.append("\n\n").append(Nx.t("Son olaylar:", "Recent events:"));
         if (events.isEmpty()) sb.append('\n').append(Nx.t("(yok)", "(none)"));
         for (String e : events) sb.append('\n').append(e);

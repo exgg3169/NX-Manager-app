@@ -46,6 +46,29 @@ import java.util.regex.Pattern;
  * Tenor embeds in its own web pages.
  */
 public final class GifActivity extends Activity {
+    /** Shows the picker; [onPick] gets the chosen GIF's link. */
+    static View picker(final Activity activity, final java.util.function.Consumer<String> onPick) {
+        return new Picker(activity, onPick).root;
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+        setTheme(dark ? android.R.style.Theme_DeviceDefault : android.R.style.Theme_DeviceDefault_Light);
+        super.onCreate(savedInstanceState);
+        setTitle(Nx.t("GIF seç", "Pick a GIF"));
+        setContentView(picker(this, link -> {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            clipboard.setPrimaryClip(ClipData.newPlainText("GIF", link));
+            Nx.toast(Nx.t("GIF bağlantısı kopyalandı. Yorum kutusuna yapıştırıp gönderin.",
+                    "GIF link copied. Paste it into a comment and send it."));
+            finish();
+        }));
+    }
+
+    /** The picker UI; works in this activity and in a dialog over the comment box. */
+    static final class Picker {
     private static final String TENOR = "https://tenor.com";
     private static final Pattern STORE = Pattern.compile(
             "<script id=\"store-cache\" type=\"text/x-cache\"[^>]*>(.*?)</script>", Pattern.DOTALL);
@@ -62,10 +85,13 @@ public final class GifActivity extends Activity {
         }
     }
 
+    private final Activity activity;
+    private final java.util.function.Consumer<String> onPick;
+    final LinearLayout root;
     private final List<Item> items = new ArrayList<>();
     private final ExecutorService search = Executors.newSingleThreadExecutor();
     private final ExecutorService images = Executors.newFixedThreadPool(4);
-    private final LruCache<String, byte[]> cache = new LruCache<String, byte[]>(16 * 1024 * 1024) {
+    private final LruCache<String, byte[]> cache = new LruCache<String, byte[]>(6 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, byte[] value) {
             return value.length;
@@ -75,26 +101,21 @@ public final class GifActivity extends Activity {
     private TextView status;
     private int generation;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
-                == Configuration.UI_MODE_NIGHT_YES;
-        setTheme(dark ? android.R.style.Theme_DeviceDefault : android.R.style.Theme_DeviceDefault_Light);
-        super.onCreate(savedInstanceState);
-        setTitle(Nx.t("GIF seç", "Pick a GIF"));
-
-        LinearLayout root = new LinearLayout(this);
+    Picker(Activity activity, java.util.function.Consumer<String> onPick) {
+        this.activity = activity;
+        this.onPick = onPick;
+        root = new LinearLayout(activity);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setFitsSystemWindows(true);
         root.setPadding(dp(12), dp(8), dp(12), 0);
 
-        TextView hint = new TextView(this);
-        hint.setText(Nx.t("Bir GIF'e dokunun: bağlantısı kopyalanır. Yorum kutusuna yapıştırıp gönderin, GIF olarak paylaşılır. Bağlantının yanına yazı da ekleyebilirsiniz.",
-                "Tap a GIF to copy its link. Paste it into a comment and send it to post it as a GIF. You can add text next to the link."));
+        TextView hint = new TextView(activity);
+        hint.setText(Nx.t("Bir GIF'e dokunun; bağlantısı yorumunuza eklenir ve gönderince GIF olarak paylaşılır. Bağlantının yanına yazı da ekleyebilirsiniz.",
+                "Tap a GIF to add its link to your comment; it is posted as a GIF. You can add text next to the link."));
         hint.setAlpha(0.75f);
         root.addView(hint);
 
-        final EditText query = new EditText(this);
+        final EditText query = new EditText(activity);
         query.setHint(Nx.t("Tenor'da ara veya Tenor bağlantısı yapıştır", "Search Tenor or paste a Tenor link"));
         query.setSingleLine(true);
         query.setInputType(InputType.TYPE_CLASS_TEXT);
@@ -109,37 +130,39 @@ public final class GifActivity extends Activity {
         });
         root.addView(query);
 
-        status = new TextView(this);
+        status = new TextView(activity);
         status.setPadding(0, dp(4), 0, dp(4));
         root.addView(status);
 
-        GridView grid = new GridView(this);
+        GridView grid = new GridView(activity);
         grid.setNumColumns(2);
         grid.setHorizontalSpacing(dp(6));
         grid.setVerticalSpacing(dp(6));
         adapter = new Adapter();
         grid.setAdapter(adapter);
-        grid.setOnItemClickListener((parent, view, position, id) -> pick(items.get(position)));
+        grid.setOnItemClickListener((parent, view, position, id) -> {
+            Item item = items.get(position);
+            shutdown();
+            onPick.accept(Gif.link(item.id));
+        });
         root.addView(grid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        setContentView(root);
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+                shutdown();
+            }
+        });
 
         load("");
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
+    private void shutdown() {
         search.shutdownNow();
         images.shutdownNow();
-    }
-
-    private void pick(Item item) {
-        String link = Gif.link(item.id);
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText("GIF", link));
-        Nx.toast(Nx.t("GIF bağlantısı kopyalandı. Yorum kutusuna yapıştırıp gönderin.",
-                "GIF link copied. Paste it into a comment and send it."));
-        finish();
     }
 
     private void load(final String input) {
@@ -156,8 +179,8 @@ public final class GifActivity extends Activity {
             }
             final List<Item> result = found;
             final String problem = error;
-            runOnUiThread(() -> {
-                if (token != generation || isFinishing()) return;
+            activity.runOnUiThread(() -> {
+                if (token != generation || activity.isFinishing()) return;
                 items.clear();
                 items.addAll(result);
                 adapter.notifyDataSetChanged();
@@ -235,8 +258,10 @@ public final class GifActivity extends Activity {
             if (flags != null && (flags.toString().contains("sticker") || flags.toString().contains("static"))) continue;
             JSONObject formats = r.optJSONObject("media_formats");
             if (formats == null) continue;
-            JSONObject f = formats.optJSONObject("tinygif");
-            if (f == null) f = formats.optJSONObject("gif");
+            // A still preview: decoding animated GIFs crashed on some devices and costs memory.
+            JSONObject f = formats.optJSONObject("gifpreview");
+            if (f == null) f = formats.optJSONObject("tinygifpreview");
+            if (f == null) f = formats.optJSONObject("tinygif");
             if (f == null) continue;
             String url = f.optString("url");
             if (!url.matches("https://media\\d*\\.tenor\\.com/.*")) continue;
@@ -276,7 +301,7 @@ public final class GifActivity extends Activity {
 
         @Override
         public View getView(int position, View convertView, ViewGroup parent) {
-            ImageView view = convertView instanceof ImageView ? (ImageView) convertView : new ImageView(GifActivity.this);
+            ImageView view = convertView instanceof ImageView ? (ImageView) convertView : new ImageView(activity);
             view.setScaleType(ImageView.ScaleType.CENTER_CROP);
             view.setLayoutParams(new AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(120)));
             view.setBackgroundColor(0x22888888);
@@ -303,11 +328,16 @@ public final class GifActivity extends Activity {
                     }
                     cache.put(url, bytes);
                 }
-                final Drawable drawable = ImageDecoder.decodeDrawable(ImageDecoder.createSource(ByteBuffer.wrap(bytes)));
-                runOnUiThread(() -> {
-                    if (!url.equals(view.getTag())) return;
-                    view.setImageDrawable(drawable);
-                    if (drawable instanceof AnimatedImageDrawable) ((AnimatedImageDrawable) drawable).start();
+                android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
+                android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+                options.inSampleSize = 1;
+                while (bounds.outWidth / (options.inSampleSize * 2) >= 240) options.inSampleSize *= 2;
+                final android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                if (bitmap == null) return;
+                activity.runOnUiThread(() -> {
+                    if (url.equals(view.getTag())) view.setImageBitmap(bitmap);
                 });
             } catch (Throwable ignored) {
             }
@@ -315,6 +345,7 @@ public final class GifActivity extends Activity {
     }
 
     private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
+    }
     }
 }

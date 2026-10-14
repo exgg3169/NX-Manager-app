@@ -28,6 +28,7 @@ public final class GmsCheck {
 
     /** Called at the start of the main activity's onCreate. */
     public static void check(final Activity activity) {
+        CrashLog.install();
         if (checked) return;
         checked = true;
         // Show dialogs after the activity is set up.
