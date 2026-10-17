@@ -28,6 +28,8 @@ public final class GifButton {
     }
 
     private static final String TAG = "nx_gif_button";
+    /** View tag key that marks NX's own text fields. */
+    static final int R_PICKER = 0x7e0a0001;
 
     /** Injection point: the comment dialog's view was created. */
     public static void attach(View root) {
@@ -124,6 +126,7 @@ public final class GifButton {
                 return;
             }
             EditText input = (EditText) focused;
+            if (input.getTag(R_PICKER) != null) return; // NX's own search box
             String described = describe(input);
             if (!isCommentBox(input, described)) {
                 if (!described.equals(lastNoted)) {

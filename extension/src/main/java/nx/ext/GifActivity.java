@@ -116,6 +116,7 @@ public final class GifActivity extends Activity {
         root.addView(hint);
 
         final EditText query = new EditText(activity);
+        query.setTag(GifButton.R_PICKER, Boolean.TRUE);
         query.setHint(Nx.t("Tenor'da ara veya Tenor bağlantısı yapıştır", "Search Tenor or paste a Tenor link"));
         query.setSingleLine(true);
         query.setInputType(InputType.TYPE_CLASS_TEXT);

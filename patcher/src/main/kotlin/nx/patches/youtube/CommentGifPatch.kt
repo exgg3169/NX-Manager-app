@@ -16,6 +16,7 @@ import nx.patcher.PatchException
 import nx.patcher.insertAtTarget
 import nx.patcher.methodRef
 import nx.patcher.parameterRegister
+import nx.patcher.parameterRegisterCount
 import nx.patcher.parseMethodReference
 import nx.patcher.returnIndexes
 import nx.patcher.single
@@ -75,6 +76,20 @@ object CommentGifPatch : Patch {
         hookReturn(body, "$EXT->body(Ljava/lang/Object;[B)[B", replace = true)
         hookReturn(headers, "$EXT->headers(Ljava/lang/Object;Ljava/util/Map;)V", replace = false)
         ctx.log("  InnerTube isteği: ${cls.type} (adres ${url.name}, başlıklar ${headers.name}, gövde ${body.name})")
+
+        // The answer: report it for rewritten requests (the app shows only a generic error).
+        val respond = cls.methodList.singleOrNull { m ->
+            m.parameterTypes.size == 3 && m.parameterTypes[0].toString() == "Ljava/util/concurrent/Executor;" &&
+                m.parameterTypes[2].toString() == "Z" && m.returnType.endsWith("ListenableFuture;")
+        } ?: throw PatchException("InnerTube response handler not found")
+        respond.code.let { code ->
+            if (code.registerCount - respond.parameterRegisterCount < 2) throw PatchException("Response handler: no free registers")
+            code.insertAtTarget(0, listOf(
+                com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction32x(Opcode.MOVE_OBJECT_16, 0, code.parameterRegister(respond, 0)),
+                com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction32x(Opcode.MOVE_OBJECT_16, 1, code.parameterRegister(respond, 2)),
+                BuilderInstruction35c(Opcode.INVOKE_STATIC, 2, 0, 1, 0, 0, 0, parseMethodReference("$EXT->response(Ljava/lang/Object;Ljava/lang/Object;)V")),
+            ))
+        }
 
         // The comment and reply dialog: add the GIF button once its view exists.
         val dialogView = ctx.dex.single(MethodFilter(

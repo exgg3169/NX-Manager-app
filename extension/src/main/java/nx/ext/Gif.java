@@ -72,6 +72,34 @@ public final class Gif {
         return r == null || r.body == null ? body : r.body;
     }
 
+    /** The answer to a request; for GIF comments the status and any error go to the diagnostics. */
+    public static void response(Object request, Object response) {
+        try {
+            if (request == null || response == null) return;
+            Rewrite r;
+            synchronized (decisions) {
+                r = decisions.get(request);
+            }
+            if (r == null || r.body == null) return;
+            int status = -1;
+            byte[] body = null;
+            for (Method m : response.getClass().getMethods()) {
+                if (m.getParameterTypes().length != 0 || m.getDeclaringClass() == Object.class) continue;
+                if (m.getReturnType() == int.class && status == -1) status = (Integer) m.invoke(response);
+                else if (m.getReturnType() == byte[].class && body == null) body = (byte[]) m.invoke(response);
+            }
+            String detail = "";
+            if (status != 200 && body != null) {
+                byte[] text = body.length > 2 && (body[0] & 0xFF) == 0x1F && (body[1] & 0xFF) == 0x8B ? gunzip(body) : body;
+                detail = new String(text, StandardCharsets.UTF_8).replaceAll("\\s+", " ");
+                if (detail.length() > 400) detail = detail.substring(0, 400) + "…";
+            }
+            Diagnostics.note(Nx.t("GIF yorumu cevabı: HTTP ", "GIF comment answer: HTTP ") + status + (detail.isEmpty() ? "" : " " + detail));
+        } catch (Throwable t) {
+            Diagnostics.note("GIF: " + t);
+        }
+    }
+
     // endregion
 
     private static Rewrite decide(Object request) {
