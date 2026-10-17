@@ -115,6 +115,7 @@ public final class Gif {
                 result = build(request);
             } catch (Throwable t) {
                 Nx.log("GIF comment failed", t);
+                Diagnostics.note("GIF: " + t);
             } finally {
                 deciding.set(false);
             }
@@ -153,9 +154,13 @@ public final class Gif {
             text = b;
             params = a;
         } else {
+            Diagnostics.note(Nx.t("GIF: yorumda Tenor bağlantısı bulunamadı", "GIF: no Tenor link in the comment"));
             return new Rewrite(null);
         }
-        if (params == null || params.isEmpty()) return new Rewrite(null);
+        if (params == null || params.isEmpty()) {
+            Diagnostics.note(Nx.t("GIF: yorum isteğinde parametre yok", "GIF: comment request has no params"));
+            return new Rewrite(null);
+        }
 
         String rest = removeLinks(text).trim();
         Locale locale = Locale.getDefault();

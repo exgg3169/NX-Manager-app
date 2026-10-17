@@ -13,6 +13,7 @@ import nx.patcher.MethodFilter
 import nx.patcher.Patch
 import nx.patcher.PatchContext
 import nx.patcher.PatchException
+import nx.patcher.find
 import nx.patcher.insertAtTarget
 import nx.patcher.methodRef
 import nx.patcher.parameterRegister
@@ -41,7 +42,7 @@ object CommentGifPatch : Patch {
 
     // The InnerTube request: builds the "youtubei/v1/<path>" URL.
     private val requestUrl = MethodFilter(
-        "InnerTube request URL", strings = listOf("youtubei/v1", "asig"), returnType = "Ljava/lang/String;", parameters = emptyList(),
+        "InnerTube request URL", strings = listOf("youtubei/v1", "asig"), parameters = emptyList(),
     )
 
     private const val DIALOG_WRAPPER = "id/comment_dialog_wrapper"
@@ -53,9 +54,37 @@ object CommentGifPatch : Patch {
         ctx.manifest.addFeature("gif")
         ctx.manifest.addActivity(ACTIVITY)
 
-        val urlHit = ctx.dex.single(requestUrl)
-        val cls = ctx.dex.edit(urlHit.classType)
-        val url = cls.methodLike(urlHit.method)
+        // YouTube has more than one InnerTube request class; all of them are hooked.
+        val classes = ctx.dex.find(requestUrl).map { it.classType }.distinct()
+        if (classes.isEmpty()) throw PatchException("InnerTube request class not found")
+        for (type in classes) hookRequestClass(ctx, type)
+
+        // The comment and reply dialog: add the GIF button once its view exists.
+        val dialogView = ctx.dex.single(MethodFilter(
+            "Comment dialog view", literals = listOf(ctx.resourceId(DIALOG_WRAPPER).toLong()),
+            returnType = "Landroid/view/View;",
+            parameters = listOf("Landroid/view/LayoutInflater;", "Landroid/view/ViewGroup;", "Landroid/os/Bundle;"),
+        ))
+        val view = ctx.dex.edit(dialogView)
+        view.code.let { code ->
+            for (index in code.returnIndexes().asReversed()) {
+                val register = (code.instructions[index] as OneRegisterInstruction).registerA
+                code.insertAtTarget(index, listOf(nx.patcher.invokeStaticRange(register, "Lnx/ext/GifButton;->attach(Landroid/view/View;)V")))
+            }
+        }
+        ctx.log("  Yorum penceresi GIF düğmesi: ${dialogView.classType}->${dialogView.method.name}")
+    }
+
+    private fun hookRequestClass(ctx: PatchContext, type: String) {
+        val cls = ctx.dex.edit(type)
+        // The public URL getter: builds the URL itself or through a private builder.
+        val builders = cls.methodList.filter { m ->
+            m.implementation?.instructions?.any { it.stringValue == "youtubei/v1" } == true
+        }.map { it.name }.toSet()
+        val url = cls.methodList.firstOrNull { m ->
+            AccessFlags.PUBLIC.isSet(m.accessFlags) && m.parameterTypes.isEmpty() && m.returnType == "Ljava/lang/String;" &&
+                (m.name in builders || m.implementation?.instructions?.any { it.methodRef?.let { r -> r.definingClass == type && r.name in builders } == true } == true)
+        } ?: throw PatchException("$type: InnerTube request URL not found")
         // Public headers getter: no parameters, returns a Map, calls the method that sets Content-Type.
         val headerBuilders = cls.methodList.filter { m ->
             m.implementation?.instructions?.any { it.stringValue == "X-GOOG-API-FORMAT-VERSION" } == true
@@ -81,8 +110,8 @@ object CommentGifPatch : Patch {
         val respond = cls.methodList.singleOrNull { m ->
             m.parameterTypes.size == 3 && m.parameterTypes[0].toString() == "Ljava/util/concurrent/Executor;" &&
                 m.parameterTypes[2].toString() == "Z" && m.returnType.endsWith("ListenableFuture;")
-        } ?: throw PatchException("InnerTube response handler not found")
-        respond.code.let { code ->
+        }
+        respond?.code?.let { code ->
             if (code.registerCount - respond.parameterRegisterCount < 2) throw PatchException("Response handler: no free registers")
             code.insertAtTarget(0, listOf(
                 com.android.tools.smali.dexlib2.builder.instruction.BuilderInstruction32x(Opcode.MOVE_OBJECT_16, 0, code.parameterRegister(respond, 0)),
@@ -91,20 +120,6 @@ object CommentGifPatch : Patch {
             ))
         }
 
-        // The comment and reply dialog: add the GIF button once its view exists.
-        val dialogView = ctx.dex.single(MethodFilter(
-            "Comment dialog view", literals = listOf(ctx.resourceId(DIALOG_WRAPPER).toLong()),
-            returnType = "Landroid/view/View;",
-            parameters = listOf("Landroid/view/LayoutInflater;", "Landroid/view/ViewGroup;", "Landroid/os/Bundle;"),
-        ))
-        val view = ctx.dex.edit(dialogView)
-        view.code.let { code ->
-            for (index in code.returnIndexes().asReversed()) {
-                val register = (code.instructions[index] as OneRegisterInstruction).registerA
-                code.insertAtTarget(index, listOf(nx.patcher.invokeStaticRange(register, "Lnx/ext/GifButton;->attach(Landroid/view/View;)V")))
-            }
-        }
-        ctx.log("  Yorum penceresi GIF düğmesi: ${dialogView.classType}->${dialogView.method.name}")
     }
 
     /** Passes `this` and every returned value of [method] through [hook]. */
